@@ -16,8 +16,8 @@ st.title("🛡️ Detecção de Fraude — Precisão × Recall **com Custos**")
 st.markdown(
     """
     **Objetivo:** comparar **duas configurações do mesmo modelo** alterando o **limiar** e **medindo custos**:
-    - **Config A (Recall)**: reduzir fraudes que passam (**FN**).  
-    - **Config B (Precisão)**: reduzir alarmes falsos (**FP**).  
+    - **Config A (Limiar Escolhido 1))**: reduzir fraudes que passam (**FN**).  
+    - **Config B (Limiar Escolhido 2))**: reduzir alarmes falsos (**FP**).  
 
     O app calcula métricas **na validação (train/test)** e mostra **custos** de cada configuração.
     """
@@ -139,7 +139,7 @@ if df_train is not None:
     def moeda(v): 
         return ("R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X","."))
     with colA:
-        st.subheader("Config A — foco em Recall")
+        st.subheader("Teste do Cenário (Limiar Escolhido 1)")
         st.metric("Recall", f"{recA:.3f}")
         st.metric("Precisão", f"{precA:.3f}")
         st.metric("Acurácia", f"{accA:.3f}")
@@ -150,7 +150,7 @@ if df_train is not None:
         st.markdown(f"**Custo estimado** = FN×perda + (VP+FP)×revisão = {fnA}×{moeda(loss_per_fraud)} + ({vpA}+{fpA})×{moeda(review_cost)} = **{moeda(costA)}**")
 
     with colB:
-        st.subheader("Config B — foco em Precisão")
+        st.subheader("Teste do Cenário (Limiar Escolhido 2)")
         st.metric("Recall", f"{recB:.3f}")
         st.metric("Precisão", f"{precB:.3f}")
         st.metric("Acurácia", f"{accB:.3f}")
