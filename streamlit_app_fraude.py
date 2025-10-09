@@ -18,7 +18,15 @@ st.markdown(
     **Objetivo:** comparar **duas configurações do mesmo modelo** alterando o **limiar** e **medindo custos**:
     - **Config A (Limiar Escolhido 1))**: reduzir fraudes que passam (**FN**).  
     - **Config B (Limiar Escolhido 2))**: reduzir alarmes falsos (**FP**).  
+    Exemplo: 
+    Limiar Escolhido (Cenário 1)= 20%
+    Transações que possuem 20% de chance de serem fraudes serão consideradas fraudes pelo modelo.
+    Limiar Escolhido (Cenário 2)= 60%
+    Transações que possuem 60% de chance de serem fraudes serão consideradas fraudes pelo modelo.
 
+    Lembre-se: temos apenas um algoritmo, uma base de treino e uma base de teste. Será gerado um único modelo.
+    O limiar escolhido muda o comportamento operacional do modelo gerado. 
+   
     O app calcula métricas **na validação (train/test)** e mostra **custos** de cada configuração.
     """
 )
@@ -30,8 +38,8 @@ with st.sidebar:
     class_balanced = st.checkbox("Usar class_weight='balanced' (opcional)", value=False)
     st.markdown("---")
     st.subheader("Limiar de decisão (prob≥limiar ⇒ FRAUDE)")
-    th_recall = st.slider("Config A — foco em Recall", 0.0, 1.0, 0.30, 0.01)
-    th_precision = st.slider("Config B — foco em Precisão", 0.0, 1.0, 0.70, 0.01)
+    th_recall = st.slider("Config A — Limiar 1", 0.0, 1.0, 0.30, 0.01)
+    th_precision = st.slider("Config B — Limiar 2", 0.0, 1.0, 0.70, 0.01)
     st.markdown("---")
     st.subheader("Parâmetros de **custo**")
     loss_per_fraud = st.number_input("Perda média se a fraude passar (R$)", min_value=0.0, value=600.0, step=50.0)
