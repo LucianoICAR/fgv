@@ -1,6 +1,6 @@
 # streamlit_app.py (tarefa1_supervisionado_v2)
 # ------------------------------------------------------
-# Exercício: Avaliação Executiva de um Sistema de IA (Supervisionado)
+# Atividade 1: Avaliação Executiva de um Sistema de IA (Supervisionado)
 # Requisitos do professor:
 # 1) Apresentar um problema de negócio.
 # 2) Upload de base histórica e split 70/30 (treino/teste).
@@ -23,8 +23,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-st.set_page_config(page_title="Exercício — Avaliação Executiva de IA (70/30)", layout="wide")
-st.title("Exercício — Avaliação Executiva de um Sistema de IA (70/30)")
+st.set_page_config(page_title="Atividade 1 — Avaliação Executiva de IA (70/30)", layout="wide")
+st.title("Atividade 1 — Avaliação Executiva de um Sistema de IA (70/30)")
 
 # 1) Problema de negócio (exemplo claro para as equipes)
 st.markdown(
