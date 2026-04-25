@@ -1,148 +1,532 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
+import math
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="Simulador Kanban | Gargalos, WIP e Capacidade",
+    page_icon="🟦",
+    layout="wide"
+)
 
-st.title("Simulador Kanban — Gargalos, WIP e Tempo de Ciclo")
-st.caption("Exercicio pratico para identificar gargalos, controlar WIP e reduzir tempo de ciclo")
+st.title("🟦 Simulador Kanban: Gargalos, WIP, Capacidade e Tempo de Ciclo")
+st.caption("Atividade prática para alunos analisarem um fluxo com gargalo severo, WIP elevado e meta de ciclo de 5 dias.")
 
-# =========================
-# PARAMETROS
-# =========================
-st.sidebar.header("Configuracao do Sistema")
+# ---------------------------------------------------------
+# Funções
+# ---------------------------------------------------------
 
-total_itens = st.sidebar.slider("Quantidade de demandas", 5, 60, 24)
-meta_ciclo = st.sidebar.slider("Meta de tempo de ciclo (dias)", 1, 20, 5)
+def calc_system(analise, dev, teste, wip_analise, wip_dev, wip_teste, demandas, dias_simulacao):
+    throughput = min(analise, dev, teste)
+    gargalo = min(
+        [("Análise", analise), ("Desenvolvimento", dev), ("Testes", teste)],
+        key=lambda x: x[1]
+    )[0]
 
-analise = st.sidebar.number_input("Analise (historias/dia)", 0.5, 10.0, 4.0)
-dev = st.sidebar.number_input("Desenvolvimento (historias/dia)", 0.5, 10.0, 1.0)
-teste = st.sidebar.number_input("Testes (historias/dia)", 0.5, 10.0, 1.0)
+    wip_total = wip_analise + wip_dev + wip_teste
+    tempo_ciclo_estimado = wip_total / throughput if throughput > 0 else 0
+    dias_para_entregar = demandas / throughput if throughput > 0 else 0
+    entregas_por_periodo = min(demandas, math.floor(throughput * dias_simulacao))
 
-wip_analise = st.sidebar.slider("WIP Analise", 1, 20, 6)
-wip_dev = st.sidebar.slider("WIP Desenvolvimento", 1, 20, 6)
-wip_teste = st.sidebar.slider("WIP Testes", 1, 20, 6)
+    return {
+        "throughput": throughput,
+        "gargalo": gargalo,
+        "wip_total": wip_total,
+        "tempo_ciclo_estimado": tempo_ciclo_estimado,
+        "dias_para_entregar": dias_para_entregar,
+        "entregas_por_periodo": entregas_por_periodo
+    }
 
-# =========================
-# CASE
-# =========================
-st.header("Case")
 
-st.markdown("""
-A empresa esta enfrentando problemas no fluxo de desenvolvimento.
+def status_tempo_ciclo(ct, meta):
+    if ct <= meta:
+        return "🟢 Dentro da meta"
+    elif ct <= meta * 2:
+        return "🟡 Atenção"
+    else:
+        return "🔴 Fora da meta"
 
-As demandas estao levando mais de 15 dias para serem entregues.
 
-A diretoria definiu a meta de reduzir o tempo de ciclo para 5 dias.
+def gerar_historias(qtd):
+    return [{"id": i, "nome": f"História #{i}", "idade": 0} for i in range(1, qtd + 1)]
 
-O problema e que a equipe de analise esta muito rapida, gerando grande volume de entrada,
-mas as etapas seguintes nao conseguem acompanhar.
 
-Isso gera:
+def capacidade_do_dia(capacidade, dia):
+    """
+    Permite simular capacidades fracionadas.
+    Exemplo: capacidade 1.5 histórias/dia.
+    Em 1 dia move 1 história; em 2 dias move 3 histórias no acumulado.
+    """
+    return math.floor(capacidade * dia) - math.floor(capacidade * (dia - 1))
 
-- acumulacao de demandas
-- filas internas
-- gargalo severo
-- baixa previsibilidade
+
+def simular_fluxo(qtd_demandas, dias, cap_analise, cap_dev, cap_teste, wip_analise, wip_dev, wip_teste):
+    """
+    Simula o quadro Kanban considerando:
+    1. Numeração única das Histórias.
+    2. Limite de WIP por etapa.
+    3. Capacidade diária de cada etapa.
+    4. Sistema puxado: o fluxo anda da direita para a esquerda:
+       Testes -> Concluído; Desenvolvimento -> Testes; Análise -> Desenvolvimento; Backlog -> Análise.
+    """
+
+    backlog = gerar_historias(qtd_demandas)
+    analise = []
+    dev = []
+    teste = []
+    concluido = []
+
+    historico = []
+
+    for dia in range(1, dias + 1):
+        mov_teste = capacidade_do_dia(cap_teste, dia)
+        mov_dev = capacidade_do_dia(cap_dev, dia)
+        mov_analise = capacidade_do_dia(cap_analise, dia)
+
+        eventos = []
+
+        # 1. Testes -> Concluído
+        qtd = min(mov_teste, len(teste))
+        for _ in range(qtd):
+            h = teste.pop(0)
+            h["idade"] = dia
+            concluido.append(h)
+            eventos.append(f'{h["nome"]}: Testes → Concluído')
+
+        # 2. Desenvolvimento -> Testes, respeitando WIP de Testes
+        espaco_teste = max(0, wip_teste - len(teste))
+        qtd = min(mov_dev, len(dev), espaco_teste)
+        for _ in range(qtd):
+            h = dev.pop(0)
+            teste.append(h)
+            eventos.append(f'{h["nome"]}: Desenvolvimento → Testes')
+
+        # 3. Análise -> Desenvolvimento, respeitando WIP de Desenvolvimento
+        espaco_dev = max(0, wip_dev - len(dev))
+        qtd = min(mov_analise, len(analise), espaco_dev)
+        for _ in range(qtd):
+            h = analise.pop(0)
+            dev.append(h)
+            eventos.append(f'{h["nome"]}: Análise → Desenvolvimento')
+
+        # 4. Backlog -> Análise, respeitando WIP de Análise
+        espaco_analise = max(0, wip_analise - len(analise))
+        qtd = min(mov_analise, len(backlog), espaco_analise)
+        for _ in range(qtd):
+            h = backlog.pop(0)
+            analise.append(h)
+            eventos.append(f'{h["nome"]}: Backlog → Análise')
+
+        historico.append({
+            "Dia": dia,
+            "Backlog": len(backlog),
+            "Análise": len(analise),
+            "Desenvolvimento": len(dev),
+            "Testes": len(teste),
+            "Concluído": len(concluido),
+            "Movimentos do dia": "; ".join(eventos) if eventos else "Sem movimentação"
+        })
+
+    return {
+        "Backlog": backlog,
+        "Análise": analise,
+        "Desenvolvimento": dev,
+        "Testes": teste,
+        "Concluído": concluido,
+        "Histórico": pd.DataFrame(historico)
+    }
+
+
+def mostrar_coluna(titulo, historias, wip=None):
+    if wip is not None:
+        st.subheader(titulo)
+        st.caption(f"WIP: {wip} | Itens na coluna: {len(historias)}")
+    else:
+        st.subheader(titulo)
+        st.caption(f"Itens na coluna: {len(historias)}")
+
+    if len(historias) == 0:
+        st.write("—")
+
+    for h in historias[:10]:
+        st.info(h["nome"])
+
+    if len(historias) > 10:
+        st.caption(f"+ {len(historias) - 10} histórias")
+
+
+# ---------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------
+
+st.sidebar.header("⚙️ Configurações do Case")
+
+demandas = st.sidebar.slider("Quantidade total de Histórias", 5, 60, 24)
+dias_simulacao = st.sidebar.slider("Dias de simulação", 1, 30, 1)
+meta_ciclo = st.sidebar.number_input("Meta de tempo de ciclo médio (dias)", min_value=1, max_value=30, value=5)
+
+st.sidebar.divider()
+
+st.sidebar.subheader("Capacidade por etapa")
+analise = st.sidebar.number_input("Análise — histórias/dia", min_value=0.5, max_value=10.0, value=4.0, step=0.5)
+dev = st.sidebar.number_input("Desenvolvimento — histórias/dia", min_value=0.5, max_value=10.0, value=1.0, step=0.5)
+teste = st.sidebar.number_input("Testes — histórias/dia", min_value=0.5, max_value=10.0, value=1.0, step=0.5)
+
+st.sidebar.divider()
+
+st.sidebar.subheader("Limites de WIP")
+wip_analise = st.sidebar.slider("WIP Análise", 1, 15, 6)
+wip_dev = st.sidebar.slider("WIP Desenvolvimento", 1, 15, 6)
+wip_teste = st.sidebar.slider("WIP Testes", 1, 15, 6)
+
+# ---------------------------------------------------------
+# Simulação
+# ---------------------------------------------------------
+
+simulacao = simular_fluxo(
+    demandas,
+    dias_simulacao,
+    analise,
+    dev,
+    teste,
+    wip_analise,
+    wip_dev,
+    wip_teste
+)
+
+# ---------------------------------------------------------
+# Abas
+# ---------------------------------------------------------
+
+aba1, aba2, aba3, aba4, aba5 = st.tabs([
+    "📘 Case",
+    "🧱 Quadro Kanban",
+    "📊 Diagnóstico",
+    "🔁 Cenários",
+    "📝 Atividade dos Alunos"
+])
+
+# ---------------------------------------------------------
+# Aba 1
+# ---------------------------------------------------------
+
+with aba1:
+    st.header("📘 Case: Fluxo de Desenvolvimento com Gargalo Severo")
+
+    st.markdown("""
+A empresa está enfrentando problemas graves no fluxo de desenvolvimento de software.
+
+Os clientes estão reclamando do **tempo de ciclo das demandas**, pois várias histórias de usuário permanecem mais de **15 dias** no sistema.
+
+A diretoria definiu uma meta: reduzir o **tempo médio de ciclo para 5 dias**.
+
+O problema é que a etapa de **Análise** está muito produtiva e consegue preparar muitas histórias rapidamente. Porém, as etapas de **Desenvolvimento** e **Testes** não conseguem absorver esse volume no mesmo ritmo.
+
+Como consequência, o sistema apresenta:
+- acúmulo de demandas em andamento;
+- filas internas;
+- gargalo severo;
+- baixa previsibilidade;
+- aumento do tempo de ciclo.
 """)
 
-df_case = pd.DataFrame({
-    "Etapa": ["Analise", "Desenvolvimento", "Testes"],
-    "Capacidade": ["4 historias/dia", "1 historia/dia", "1 historia/dia"],
-    "Pessoas": [4, 5, 3],
-    "Observacao": [
-        "Equipe rapida, gera alto volume de entrada",
-        "Alta complexidade tecnica",
-        "Processo lento e rigoroso"
-    ]
-})
-
-st.dataframe(df_case, use_container_width=True)
-
-# =========================
-# SIMULACAO
-# =========================
-st.header("Simulacao do Fluxo")
-
-analise_q = 0
-dev_q = 0
-teste_q = 0
-done = 0
-
-historico = []
-
-for dia in range(1, 30):
-    entrada = analise
-
-    espaco_analise = wip_analise - analise_q
-    entrada_real = min(entrada, espaco_analise)
-    analise_q += entrada_real
-
-    move_dev = min(analise_q, dev, wip_dev - dev_q)
-    analise_q -= move_dev
-    dev_q += move_dev
-
-    move_teste = min(dev_q, teste, wip_teste - teste_q)
-    dev_q -= move_teste
-    teste_q += move_teste
-
-    concluido = min(teste_q, teste)
-    teste_q -= concluido
-    done += concluido
-
-    historico.append({
-        "Dia": dia,
-        "Analise": analise_q,
-        "Desenvolvimento": dev_q,
-        "Testes": teste_q,
-        "Concluido": done
+    st.subheader("Processo atual")
+    df_case = pd.DataFrame({
+        "Etapa": ["Análise", "Desenvolvimento", "Testes"],
+        "Capacidade atual": ["4 histórias/dia", "1 história/dia", "1 história/dia"],
+        "Pessoas": [4, 5, 3],
+        "Observação": [
+            "Equipe rápida; gera grande volume de histórias analisadas para o fluxo.",
+            "Alta complexidade técnica; é a primeira etapa crítica do gargalo.",
+            "Processo rigoroso e lento; forma gargalo junto com o desenvolvimento."
+        ]
     })
+    st.dataframe(df_case, use_container_width=True, hide_index=True)
 
-df = pd.DataFrame(historico)
+    st.info("Missão: construir o Quadro Kanban, identificar o gargalo severo, definir limites de WIP e propor ajustes para reduzir o tempo de ciclo para 5 dias.")
 
-st.line_chart(df.set_index("Dia"))
+# ---------------------------------------------------------
+# Aba 2
+# ---------------------------------------------------------
 
-# =========================
-# RESULTADOS
-# =========================
-st.header("Resultados")
+with aba2:
+    st.header("🧱 Quadro Kanban com Histórias Numeradas")
 
-throughput = min(dev, teste)
-wip_total = analise_q + dev_q + teste_q
+    st.markdown("""
+O quadro agora considera **duas restrições simultâneas**:
 
-tempo_ciclo = wip_total / throughput if throughput > 0 else 0
+1. **Limite de WIP**: quantidade máxima de Histórias que podem ficar em cada etapa.
+2. **Capacidade diária**: quantidade máxima de Histórias que cada etapa consegue processar por dia.
 
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Throughput", round(throughput,2))
-col2.metric("WIP Total", round(wip_total,2))
-col3.metric("Tempo de Ciclo", round(tempo_ciclo,2))
-
-if tempo_ciclo > meta_ciclo:
-    st.error("Tempo de ciclo acima da meta")
-else:
-    st.success("Tempo de ciclo dentro da meta")
-
-# =========================
-# INSIGHT
-# =========================
-st.header("Analise")
-
-st.markdown(f"""
-- Gargalo em Desenvolvimento/Testes  
-- Entrada maior que saida  
-- WIP cresce continuamente  
-- Tempo de ciclo estimado: {round(tempo_ciclo,2)} dias  
-
-O sistema esta desbalanceado
+As Histórias mantêm numeração única durante toda a simulação.
 """)
 
-st.header("Perguntas")
+    col1, col2, col3, col4, col5 = st.columns(5)
 
-st.markdown("""
-1. Qual e o gargalo do sistema?  
-2. O WIP esta adequado?  
-3. O que acontece se aumentar ainda mais a analise?  
-4. Como reduzir o tempo de ciclo para 5 dias?  
+    with col1:
+        mostrar_coluna("Backlog", simulacao["Backlog"])
+    with col2:
+        mostrar_coluna("Análise", simulacao["Análise"], wip_analise)
+    with col3:
+        mostrar_coluna("Desenvolvimento", simulacao["Desenvolvimento"], wip_dev)
+    with col4:
+        mostrar_coluna("Testes", simulacao["Testes"], wip_teste)
+    with col5:
+        mostrar_coluna("Concluído", simulacao["Concluído"])
+
+    st.warning("Altere os dias de simulação, os limites de WIP e as capacidades para observar a evolução das Histórias no quadro.")
+
+    with st.expander("Ver histórico diário da simulação"):
+        st.dataframe(simulacao["Histórico"], use_container_width=True, hide_index=True)
+
+    with st.expander("Ver lista completa das Histórias por coluna"):
+        linhas = []
+        for coluna in ["Backlog", "Análise", "Desenvolvimento", "Testes", "Concluído"]:
+            for historia in simulacao[coluna]:
+                linhas.append({"Coluna": coluna, "História": historia["nome"]})
+        st.dataframe(pd.DataFrame(linhas), use_container_width=True, hide_index=True)
+
+# ---------------------------------------------------------
+# Aba 3
+# ---------------------------------------------------------
+
+with aba3:
+    st.header("📊 Diagnóstico do Sistema")
+
+    resultado = calc_system(
+        analise, dev, teste,
+        wip_analise, wip_dev, wip_teste,
+        demandas, dias_simulacao
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Throughput do sistema", f"{resultado['throughput']:.1f}/dia")
+    c2.metric("Gargalo", resultado["gargalo"])
+    c3.metric("WIP total permitido", resultado["wip_total"])
+    c4.metric("Tempo de ciclo estimado", f"{resultado['tempo_ciclo_estimado']:.1f} dias")
+
+    st.subheader("Interpretação")
+    st.markdown(f"""
+- O sistema consegue entregar, no máximo, **{resultado['throughput']:.1f} história(s) por dia**.
+- O gargalo atual é: **{resultado['gargalo']}**.
+- Com WIP total permitido de **{resultado['wip_total']}**, o tempo de ciclo estimado pela Lei de Little é de **{resultado['tempo_ciclo_estimado']:.1f} dias**.
+- Status em relação à meta de **{meta_ciclo} dias**: **{status_tempo_ciclo(resultado['tempo_ciclo_estimado'], meta_ciclo)}**.
 """)
+
+    if resultado["tempo_ciclo_estimado"] > meta_ciclo:
+        st.error("O sistema está acima da meta. Reduza o WIP, aumente a capacidade do gargalo ou faça as duas coisas.")
+    else:
+        st.success("O sistema está dentro da meta de tempo de ciclo.")
+
+    st.subheader("Capacidade por etapa")
+    df_cap = pd.DataFrame({
+        "Etapa": ["Análise", "Desenvolvimento", "Testes"],
+        "Capacidade": [analise, dev, teste],
+        "É gargalo?": [
+            "Sim" if resultado["gargalo"] == "Análise" else "Não",
+            "Sim" if resultado["gargalo"] == "Desenvolvimento" else "Não",
+            "Sim" if resultado["gargalo"] == "Testes" else "Não"
+        ]
+    })
+    st.bar_chart(df_cap.set_index("Etapa")["Capacidade"])
+    st.dataframe(df_cap, use_container_width=True, hide_index=True)
+
+    st.subheader("Evolução acumulada")
+    df_hist = simulacao["Histórico"].copy()
+    st.line_chart(df_hist.set_index("Dia")[["Backlog", "Análise", "Desenvolvimento", "Testes", "Concluído"]])
+
+# ---------------------------------------------------------
+# Aba 4
+# ---------------------------------------------------------
+
+with aba4:
+    st.header("🔁 Comparação de Cenários")
+
+    cenarios = {
+        "A — Sistema atual com WIP alto": {
+            "analise": 4.0,
+            "dev": 1.0,
+            "teste": 1.0,
+            "wip_analise": 6,
+            "wip_dev": 6,
+            "wip_teste": 6
+        },
+        "B — Apenas limitar WIP": {
+            "analise": 4.0,
+            "dev": 1.0,
+            "teste": 1.0,
+            "wip_analise": 2,
+            "wip_dev": 2,
+            "wip_teste": 1
+        },
+        "C — Aumentar Desenvolvimento": {
+            "analise": 4.0,
+            "dev": 2.0,
+            "teste": 1.0,
+            "wip_analise": 2,
+            "wip_dev": 2,
+            "wip_teste": 1
+        },
+        "D — Atuar no gargalo duplo": {
+            "analise": 4.0,
+            "dev": 2.0,
+            "teste": 2.0,
+            "wip_analise": 2,
+            "wip_dev": 2,
+            "wip_teste": 1
+        },
+        "E — Reduzir entrada e balancear fluxo": {
+            "analise": 2.0,
+            "dev": 2.0,
+            "teste": 2.0,
+            "wip_analise": 2,
+            "wip_dev": 2,
+            "wip_teste": 1
+        }
+    }
+
+    linhas = []
+    for nome, cfg in cenarios.items():
+        r = calc_system(
+            cfg["analise"], cfg["dev"], cfg["teste"],
+            cfg["wip_analise"], cfg["wip_dev"], cfg["wip_teste"],
+            demandas, dias_simulacao
+        )
+
+        sim_cenario = simular_fluxo(
+            demandas,
+            dias_simulacao,
+            cfg["analise"],
+            cfg["dev"],
+            cfg["teste"],
+            cfg["wip_analise"],
+            cfg["wip_dev"],
+            cfg["wip_teste"]
+        )
+
+        linhas.append({
+            "Cenário": nome,
+            "Throughput teórico": r["throughput"],
+            "Gargalo": r["gargalo"],
+            "WIP Total": r["wip_total"],
+            "Tempo de Ciclo Estimado": round(r["tempo_ciclo_estimado"], 1),
+            "Histórias Concluídas na Simulação": len(sim_cenario["Concluído"]),
+            "Status": status_tempo_ciclo(r["tempo_ciclo_estimado"], meta_ciclo)
+        })
+
+    df_cenarios = pd.DataFrame(linhas)
+    st.dataframe(df_cenarios, use_container_width=True, hide_index=True)
+
+    st.subheader("Gráfico comparativo — Tempo de Ciclo Estimado")
+    st.bar_chart(df_cenarios.set_index("Cenário")["Tempo de Ciclo Estimado"])
+
+    st.subheader("Gráfico comparativo — Histórias Concluídas na Simulação")
+    st.bar_chart(df_cenarios.set_index("Cenário")["Histórias Concluídas na Simulação"])
+
+    melhor = df_cenarios.sort_values(["Histórias Concluídas na Simulação", "Tempo de Ciclo Estimado"], ascending=[False, True]).iloc[0]
+    st.success(f"Melhor cenário pela simulação: **{melhor['Cenário']}**.")
+
+# ---------------------------------------------------------
+# Aba 5
+# ---------------------------------------------------------
+
+with aba5:
+    st.header("📝 Atividade dos Alunos")
+
+    st.markdown("""
+## Entregáveis da equipe
+
+Cada equipe deve entregar:
+
+### 1. Quadro Kanban proposto
+Desenhar o quadro com as colunas:
+- Backlog
+- Análise
+- Desenvolvimento
+- Testes
+- Concluído
+
+As Histórias devem ter **numeração única**.  
+Exemplo: História #1, História #2, História #3, até a última História do case.
+
+### 2. Diagnóstico do fluxo
+Responder:
+1. Qual é o gargalo do sistema? Existe gargalo duplo?
+2. Qual etapa gera fila?
+3. Onde existe ociosidade?
+4. Qual é o throughput máximo do sistema?
+
+### 3. Limites de WIP
+Definir os limites de WIP para:
+- Análise
+- Desenvolvimento
+- Testes
+
+A equipe deve justificar cada limite.
+
+### 4. Simulação de capacidade
+Executar a simulação alterando:
+- dias de simulação;
+- capacidade das etapas;
+- limites de WIP.
+
+Explicar como essas variáveis mudam a evolução das Histórias no quadro.
+
+### 5. Políticas explícitas
+Definir:
+- regra para puxar uma nova demanda;
+- critério de pronto da análise;
+- critério de pronto do desenvolvimento;
+- critério de pronto dos testes;
+- regra para tratar demandas bloqueadas.
+
+### 6. Decisão executiva
+Escolher um cenário de melhoria e justificar:
+
+- Cenário A: apenas aplicar WIP;
+- Cenário B: realocar pessoas;
+- Cenário C: aumentar capacidade do desenvolvimento;
+- Cenário D: manter o sistema atual.
+
+### 7. Conclusão
+Explicar como a proposta reduz o tempo de ciclo para 5 dias e aumenta a previsibilidade.
+""")
+
+    st.download_button(
+        label="⬇️ Baixar enunciado da atividade",
+        data="""ATIVIDADE — KANBAN, GARGALOS, WIP, CAPACIDADE E HISTÓRIAS NUMERADAS
+
+Contexto:
+A empresa a empresa do case está enfrentando atrasos no fluxo de desenvolvimento de software. O tempo de ciclo médio atual supera 15 dias e a meta é reduzi-lo para 5 dias.
+
+Processo:
+- Análise: 3 histórias/dia
+- Desenvolvimento: 1 história/dia
+- Testes: 2 histórias/dia
+
+Regra importante:
+Cada História de Usuário deve ter uma numeração única. Se o sistema possui 12 demandas, as Histórias devem ser numeradas de História #1 até História #12. Essa numeração deve permanecer a mesma quando a História avançar no quadro Kanban.
+
+O quadro deve considerar simultaneamente:
+1. Limites de WIP.
+2. Capacidade diária das etapas.
+
+Missão:
+Construir o Quadro Kanban, identificar gargalos, definir limites de WIP, simular a capacidade diária e propor ajustes de fluxo.
+
+Entregáveis:
+1. Quadro Kanban proposto com Histórias numeradas
+2. Diagnóstico do fluxo
+3. Limites de WIP
+4. Simulação de capacidade
+5. Políticas explícitas
+6. Decisão executiva
+7. Conclusão
+""",
+        file_name="atividade_kanban_wip_capacidade_historias_numeradas.txt",
+        mime="text/plain"
+    )
+
+st.divider()
+st.caption("Modelo didático para ensino de Kanban, gargalos, WIP, capacidade, throughput, tempo de ciclo e rastreabilidade visual das Histórias.")
