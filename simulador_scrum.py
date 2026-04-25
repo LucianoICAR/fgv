@@ -3,10 +3,14 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(
-    page_title="Simulador Scrum | Review e Retrospectiva",
+    page_title="Simulador Scrum | Histórias, Tarefas, Review e Retrospectiva",
     page_icon="🏉",
     layout="wide"
 )
+
+# =========================================================
+# Dados
+# =========================================================
 
 BACKLOG_PADRAO = [
     {"ID": "US1", "História": "Login seguro com autenticação forte", "Valor": 100, "Esforço": 5, "Risco": "Médio"},
@@ -26,13 +30,6 @@ PROBLEMAS_REVIEW = [
     "O Dashboard Executivo apresentou dados inconsistentes entre transações aprovadas e transações contestadas.",
     "A integração com a API bancária externa funcionou no ambiente de teste, mas apresentou lentidão e falhas intermitentes na demonstração."
 ]
-
-RETRO_4TIAS = {
-    "Alegria": "O que deixou o time satisfeito nesta Sprint?",
-    "Tristeza": "O que gerou frustração, atraso ou perda de qualidade?",
-    "Medo": "Quais riscos ou preocupações permanecem para a próxima Sprint?",
-    "Raiva": "O que incomodou o time e precisa ser enfrentado com transparência?"
-}
 
 PROBLEMA_ESCOLHIDO = "A integração com a API bancária externa apresentou lentidão e falhas intermitentes na demonstração do incremento."
 
@@ -74,6 +71,10 @@ PLANO_ACAO = pd.DataFrame({
 })
 
 
+# =========================================================
+# Funções
+# =========================================================
+
 def iniciar():
     st.session_state.setdefault("backlog", pd.DataFrame(BACKLOG_PADRAO))
     st.session_state.setdefault("sprint", 1)
@@ -86,8 +87,35 @@ def resetar():
     iniciar()
 
 
-def executar_sprint(df, capacidade):
-    temp = df.copy()
+def montar_tarefas(sprint_df):
+    linhas = []
+
+    for _, row in sprint_df.iterrows():
+        us_id = row["ID"]
+        historia = row["História"]
+
+        tarefa_1 = st.session_state.get(f"tarefa_{us_id}_1", "").strip()
+        tarefa_2 = st.session_state.get(f"tarefa_{us_id}_2", "").strip()
+
+        linhas.append({
+            "ID História": us_id,
+            "História": historia,
+            "ID Tarefa": f"{us_id}-T1",
+            "Tarefa": tarefa_1
+        })
+
+        linhas.append({
+            "ID História": us_id,
+            "História": historia,
+            "ID Tarefa": f"{us_id}-T2",
+            "Tarefa": tarefa_2
+        })
+
+    return pd.DataFrame(linhas)
+
+
+def executar_sprint(sprint_df, tarefas_df, capacidade):
+    temp = sprint_df.copy()
     temp["Valor por Ponto"] = temp["Valor"] / temp["Esforço"]
     temp = temp.sort_values(["Valor por Ponto", "Valor"], ascending=False)
 
@@ -96,25 +124,40 @@ def executar_sprint(df, capacidade):
 
     for _, row in temp.iterrows():
         if esforco_usado + row["Esforço"] <= capacidade:
-            item = row.drop(labels=["Valor por Ponto"]).to_dict()
-            entregues.append(item)
+            entregues.append(row.drop(labels=["Valor por Ponto"]).to_dict())
             esforco_usado += int(row["Esforço"])
 
     entregues_df = pd.DataFrame(entregues)
-    ids_entregues = set(entregues_df["ID"].tolist()) if not entregues_df.empty else set()
-    nao_entregues_df = df[~df["ID"].isin(ids_entregues)].copy()
+
+    ids_entregues = entregues_df["ID"].tolist() if not entregues_df.empty else []
+    nao_entregues_df = sprint_df[~sprint_df["ID"].isin(ids_entregues)].copy()
+
+    tarefas_entregues_df = tarefas_df[tarefas_df["ID História"].isin(ids_entregues)].copy()
+    tarefas_nao_entregues_df = tarefas_df[~tarefas_df["ID História"].isin(ids_entregues)].copy()
 
     valor_entregue = int(entregues_df["Valor"].sum()) if not entregues_df.empty else 0
-    esforco_planejado = int(df["Esforço"].sum()) if not df.empty else 0
+    esforco_planejado = int(sprint_df["Esforço"].sum()) if not sprint_df.empty else 0
     previsibilidade = round((esforco_usado / esforco_planejado) * 100, 1) if esforco_planejado > 0 else 0
 
-    return entregues_df, nao_entregues_df, valor_entregue, esforco_usado, previsibilidade
+    return {
+        "entregues": entregues_df,
+        "nao_entregues": nao_entregues_df,
+        "tarefas_entregues": tarefas_entregues_df,
+        "tarefas_nao_entregues": tarefas_nao_entregues_df,
+        "valor": valor_entregue,
+        "esforco": esforco_usado,
+        "previsibilidade": previsibilidade
+    }
 
+
+# =========================================================
+# Aplicação
+# =========================================================
 
 iniciar()
 
-st.title("🏉 Simulador Scrum — Review do Produto e Retrospectiva da Sprint")
-st.caption("Exercício prático com Sprint Planning, execução, Sprint Review, Retrospectiva das 4 tias e plano de ação.")
+st.title("🏉 Simulador Scrum — Histórias, Tarefas, Review e Retrospectiva")
+st.caption("Sprint Planning com decomposição de Histórias em tarefas, Execução, Sprint Review e Retrospectiva das 4 tias.")
 
 with st.sidebar:
     st.header("⚙️ Configuração")
@@ -134,50 +177,44 @@ aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
     "🔁 Retrospectiva"
 ])
 
+# =========================================================
+# Aba 1
+# =========================================================
+
 with aba1:
     st.header("📘 Case da Simulação")
 
     st.markdown("""
 Você faz parte de um time Scrum responsável por desenvolver uma plataforma digital para uma **FinTech regulada**.
 
-A organização deseja entregar valor rapidamente, mas precisa manter atenção especial a:
-
-- segurança;
-- integração com APIs externas;
-- rastreabilidade;
-- auditoria;
-- experiência do usuário;
-- confiabilidade do incremento.
-
 ## Missão do time
 
 1. Selecionar Histórias de Usuário para a Sprint.
-2. Executar a Sprint dentro da capacidade disponível.
-3. Apresentar o incremento na Revisão do Produto.
-4. Analisar os problemas encontrados.
+2. Transformar cada História selecionada em **duas tarefas**.
+3. Executar a Sprint dentro da capacidade disponível.
+4. Apresentar o incremento na Sprint Review.
 5. Realizar a Retrospectiva da Sprint usando a técnica das **4 tias**.
 6. Escolher um problema e transformá-lo em plano de ação.
 """)
 
-    st.info("A simulação diferencia claramente Sprint Review, que olha o produto, e Retrospectiva, que olha o processo de trabalho do time.")
+    st.info("Nesta versão, o Planejamento exige obrigatoriamente 2 tarefas para cada História selecionada.")
+
+# =========================================================
+# Aba 2
+# =========================================================
 
 with aba2:
     st.header("📦 Product Backlog")
     st.dataframe(st.session_state.backlog, use_container_width=True, hide_index=True)
 
-    st.markdown("""
-### Critérios de leitura
-
-- **Valor:** impacto de negócio.
-- **Esforço:** tamanho estimado em pontos.
-- **Risco:** incerteza técnica, regulatória ou operacional.
-""")
+# =========================================================
+# Aba 3
+# =========================================================
 
 with aba3:
     st.header("🧭 Sprint Planning")
 
     backlog = st.session_state.backlog.copy()
-
     st.write(f"**Capacidade disponível da Sprint:** {st.session_state.capacidade} pontos")
 
     opcoes = (
@@ -188,28 +225,62 @@ with aba3:
     ).tolist()
 
     selecionadas = st.multiselect("Selecione as Histórias para a Sprint", opcoes)
-    ids = [x.split(" — ")[0] for x in selecionadas]
+
+    ids = [item.split(" — ")[0] for item in selecionadas]
     sprint_df = backlog[backlog["ID"].isin(ids)].copy()
 
-    if not sprint_df.empty:
-        esforco = int(sprint_df["Esforço"].sum())
-        valor = int(sprint_df["Valor"].sum())
+    if sprint_df.empty:
+        st.warning("Selecione pelo menos uma História para montar o Sprint Backlog.")
+    else:
+        esforco_total = int(sprint_df["Esforço"].sum())
+        valor_total = int(sprint_df["Valor"].sum())
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Esforço planejado", esforco)
-        c2.metric("Valor planejado", valor)
+        c1.metric("Esforço planejado", esforco_total)
+        c2.metric("Valor planejado", valor_total)
         c3.metric("Capacidade", st.session_state.capacidade)
 
-        st.dataframe(sprint_df, use_container_width=True, hide_index=True)
-
-        if esforco > st.session_state.capacidade:
-            st.error("O esforço planejado excede a capacidade da Sprint. O time poderá não entregar tudo.")
+        if esforco_total > st.session_state.capacidade:
+            st.error("O esforço planejado excede a capacidade. Nem todas as Histórias poderão ser entregues.")
         else:
             st.success("O planejamento está dentro da capacidade.")
 
+        st.subheader("Histórias selecionadas")
+        st.dataframe(sprint_df, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("Decomposição obrigatória: 2 tarefas por História")
+
+        for _, row in sprint_df.iterrows():
+            us_id = row["ID"]
+            historia = row["História"]
+
+            st.markdown(f"### {us_id} — {historia}")
+
+            col_t1, col_t2 = st.columns(2)
+
+            with col_t1:
+                st.text_input(
+                    f"Tarefa 1 de {us_id}",
+                    key=f"tarefa_{us_id}_1",
+                    placeholder="Ex.: Implementar componente, regra ou integração"
+                )
+
+            with col_t2:
+                st.text_input(
+                    f"Tarefa 2 de {us_id}",
+                    key=f"tarefa_{us_id}_2",
+                    placeholder="Ex.: Criar teste, validação ou evidência de aceite"
+                )
+
+        tarefas_previa = montar_tarefas(sprint_df)
+
+        with st.expander("Pré-visualizar tarefas criadas"):
+            st.dataframe(tarefas_previa, use_container_width=True, hide_index=True)
+
     objetivo = st.text_area(
         "Objetivo da Sprint",
-        placeholder="Exemplo: entregar funcionalidades críticas de segurança, auditoria e integração bancária."
+        placeholder="Ex.: Entregar funcionalidades críticas de segurança, auditoria e integração bancária."
     )
 
     if st.button("✅ Confirmar Planejamento"):
@@ -218,38 +289,65 @@ with aba3:
         elif not objetivo.strip():
             st.warning("Defina o Objetivo da Sprint.")
         else:
-            st.session_state.sprint_df = sprint_df
-            st.session_state.objetivo = objetivo
-            for k in ["resultado", "review_feita", "retro_feita"]:
-                st.session_state.pop(k, None)
-            st.success("Planejamento confirmado. Vá para Execução.")
+            tarefas_df = montar_tarefas(sprint_df)
+
+            if tarefas_df["Tarefa"].eq("").any():
+                st.warning("Preencha exatamente 2 tarefas para cada História selecionada.")
+            else:
+                st.session_state.sprint_df = sprint_df
+                st.session_state.tarefas_df = tarefas_df
+                st.session_state.objetivo = objetivo
+
+                for k in ["resultado", "review_feita"]:
+                    st.session_state.pop(k, None)
+
+                st.success("Planejamento confirmado com Histórias e tarefas. Vá para a aba Execução.")
+
+# =========================================================
+# Aba 4
+# =========================================================
 
 with aba4:
     st.header("🚀 Execução da Sprint")
 
-    if "sprint_df" not in st.session_state:
-        st.warning("Realize o Planejamento da Sprint antes.")
+    if "sprint_df" not in st.session_state or "tarefas_df" not in st.session_state:
+        st.warning("Realize e confirme o Planejamento da Sprint antes da Execução.")
     else:
         st.write(f"**Objetivo da Sprint:** {st.session_state.objetivo}")
+
+        st.subheader("Sprint Backlog — Histórias")
         st.dataframe(st.session_state.sprint_df, use_container_width=True, hide_index=True)
 
+        st.subheader("Sprint Backlog — Tarefas associadas às Histórias")
+        st.dataframe(st.session_state.tarefas_df, use_container_width=True, hide_index=True)
+
+        with st.expander("Ver tarefas agrupadas por História"):
+            for us_id in st.session_state.sprint_df["ID"].tolist():
+                historia = st.session_state.sprint_df.loc[
+                    st.session_state.sprint_df["ID"] == us_id, "História"
+                ].iloc[0]
+
+                st.markdown(f"### {us_id} — {historia}")
+
+                tarefas_us = st.session_state.tarefas_df[
+                    st.session_state.tarefas_df["ID História"] == us_id
+                ]
+
+                for _, tarefa in tarefas_us.iterrows():
+                    st.write(f"- **{tarefa['ID Tarefa']}**: {tarefa['Tarefa']}")
+
         if st.button("🚀 Executar Sprint"):
-            ent, nao, valor, esforco, previs = executar_sprint(
+            st.session_state.resultado = executar_sprint(
                 st.session_state.sprint_df,
+                st.session_state.tarefas_df,
                 st.session_state.capacidade
             )
 
-            st.session_state.resultado = {
-                "entregues": ent,
-                "nao_entregues": nao,
-                "valor": valor,
-                "esforco": esforco,
-                "previsibilidade": previs
-            }
-            st.success("Sprint executada. Vá para Revisão do Produto.")
+            st.success("Sprint executada. Confira o resultado abaixo e depois vá para a Revisão do Produto.")
 
         if "resultado" in st.session_state:
             r = st.session_state.resultado
+
             c1, c2, c3 = st.columns(3)
             c1.metric("Valor entregue", r["valor"])
             c2.metric("Esforço entregue", r["esforco"])
@@ -261,11 +359,27 @@ with aba4:
             else:
                 st.dataframe(r["entregues"], use_container_width=True, hide_index=True)
 
+            st.subheader("Tarefas entregues")
+            if r["tarefas_entregues"].empty:
+                st.write("Nenhuma tarefa entregue.")
+            else:
+                st.dataframe(r["tarefas_entregues"], use_container_width=True, hide_index=True)
+
             st.subheader("Histórias não entregues")
             if r["nao_entregues"].empty:
                 st.write("Todas as Histórias planejadas foram entregues.")
             else:
                 st.dataframe(r["nao_entregues"], use_container_width=True, hide_index=True)
+
+            st.subheader("Tarefas não entregues")
+            if r["tarefas_nao_entregues"].empty:
+                st.write("Todas as tarefas planejadas foram entregues.")
+            else:
+                st.dataframe(r["tarefas_nao_entregues"], use_container_width=True, hide_index=True)
+
+# =========================================================
+# Aba 5
+# =========================================================
 
 with aba5:
     st.header("🧪 Revisão do Produto — Sprint Review")
@@ -274,41 +388,35 @@ with aba5:
         st.warning("Execute a Sprint antes da Revisão do Produto.")
     else:
         st.markdown("""
-A Sprint Review é o momento de **inspecionar o incremento do produto** com stakeholders.
+A Sprint Review serve para inspecionar o **incremento do produto** com stakeholders.
 
-O foco não é avaliar o comportamento do time, mas sim responder:
-
-- O incremento gera valor?
-- O produto atende às expectativas?
-- O Product Backlog precisa ser adaptado?
-- Quais problemas foram identificados na apresentação?
+O foco é o produto: valor entregue, aderência às expectativas e adaptações necessárias no Product Backlog.
 """)
 
-        st.subheader("Incremento apresentado")
+        st.subheader("Incremento apresentado — Histórias entregues")
         if st.session_state.resultado["entregues"].empty:
-            st.write("Nenhuma História foi entregue para apresentação.")
+            st.write("Nenhuma História entregue.")
         else:
             st.dataframe(st.session_state.resultado["entregues"], use_container_width=True, hide_index=True)
 
-        st.subheader("Problemas apontados pelos stakeholders")
+        st.subheader("Tarefas concluídas associadas ao incremento")
+        if st.session_state.resultado["tarefas_entregues"].empty:
+            st.write("Nenhuma tarefa concluída.")
+        else:
+            st.dataframe(st.session_state.resultado["tarefas_entregues"], use_container_width=True, hide_index=True)
 
+        st.subheader("Três problemas apontados na apresentação do incremento")
         for i, problema in enumerate(PROBLEMAS_REVIEW, start=1):
             st.error(f"Problema {i}: {problema}")
 
-        st.markdown("""
-### Atividade do aluno
-
-A equipe deve registrar a decisão de produto após a Review.
-""")
-
         decisao_produto = st.text_area(
-            "Qual decisão de produto o Product Owner deveria tomar após a Review?",
-            placeholder="Exemplo: reordenar o backlog, criar histórias de correção, revisar critérios de aceite e priorizar estabilidade da integração."
+            "Decisão de produto após a Review",
+            placeholder="Ex.: reordenar o backlog, criar histórias de correção, ajustar critérios de aceite."
         )
 
         adaptacao_backlog = st.text_area(
-            "Quais adaptações devem ser feitas no Product Backlog?",
-            placeholder="Exemplo: criar item de correção para a API externa, adicionar critérios de auditoria e revisar história do dashboard."
+            "Adaptações necessárias no Product Backlog",
+            placeholder="Ex.: criar item para estabilizar API externa e revisar requisitos do relatório regulatório."
         )
 
         if st.button("✅ Registrar Sprint Review"):
@@ -316,7 +424,11 @@ A equipe deve registrar a decisão de produto após a Review.
                 "decisao_produto": decisao_produto,
                 "adaptacao_backlog": adaptacao_backlog
             }
-            st.success("Sprint Review registrada. Vá para Retrospectiva.")
+            st.success("Sprint Review registrada. Vá para a Retrospectiva.")
+
+# =========================================================
+# Aba 6
+# =========================================================
 
 with aba6:
     st.header("🔁 Retrospectiva da Sprint")
@@ -335,15 +447,15 @@ Nesta simulação, será usada a **Retrospectiva das 4 tias**:
 - **Raiva:** o que incomodou e precisa ser enfrentado?
 """)
 
-        st.subheader("Retrospectiva das 4 tias")
-
         col1, col2 = st.columns(2)
+
         with col1:
-            alegria = st.text_area(f"😊 Alegria — {RETRO_4TIAS['Alegria']}")
-            tristeza = st.text_area(f"😢 Tristeza — {RETRO_4TIAS['Tristeza']}")
+            alegria = st.text_area("😊 Alegria — O que deixou o time satisfeito nesta Sprint?")
+            tristeza = st.text_area("😢 Tristeza — O que gerou frustração, atraso ou perda de qualidade?")
+
         with col2:
-            medo = st.text_area(f"😨 Medo — {RETRO_4TIAS['Medo']}")
-            raiva = st.text_area(f"😠 Raiva — {RETRO_4TIAS['Raiva']}")
+            medo = st.text_area("😨 Medo — Quais riscos ou preocupações permanecem para a próxima Sprint?")
+            raiva = st.text_area("😠 Raiva — O que incomodou o time e precisa ser enfrentado?")
 
         st.markdown("---")
         st.header("🛠️ Transformando problema em plano de ação")
@@ -360,12 +472,6 @@ Nesta simulação, será usada a **Retrospectiva das 4 tias**:
         st.subheader("3. Plano de Ação — 5W2H")
         st.dataframe(PLANO_ACAO, use_container_width=True, hide_index=True)
 
-        st.markdown("""
-### Atividade do aluno
-
-A equipe deve propor um plano de ação próprio ou ajustar o plano sugerido.
-""")
-
         plano_aluno = st.text_area(
             "Plano de ação proposto pela equipe",
             placeholder="Descreva as ações que a equipe adotaria para evitar recorrência do problema."
@@ -373,6 +479,7 @@ A equipe deve propor um plano de ação próprio ou ajustar o plano sugerido.
 
         if st.button("📌 Encerrar Sprint"):
             r = st.session_state.resultado
+
             registro = {
                 "Sprint": st.session_state.sprint,
                 "Objetivo": st.session_state.objetivo,
@@ -393,7 +500,7 @@ A equipe deve propor um plano de ação próprio ou ajustar o plano sugerido.
                 ~st.session_state.backlog["ID"].isin(ids_entregues)
             ].copy()
 
-            for k in ["sprint_df", "resultado", "objetivo", "review_feita"]:
+            for k in ["sprint_df", "tarefas_df", "resultado", "objetivo", "review_feita"]:
                 st.session_state.pop(k, None)
 
             st.session_state.sprint += 1
@@ -408,9 +515,9 @@ A equipe deve propor um plano de ação próprio ou ajustar o plano sugerido.
             st.download_button(
                 "⬇️ Baixar histórico da simulação",
                 hist.to_csv(index=False, encoding="utf-8-sig"),
-                "historico_simulacao_scrum_review_retro.csv",
+                "historico_simulacao_scrum.csv",
                 "text/csv"
             )
 
 st.divider()
-st.caption("Simulador didático de Scrum com Sprint Review, Retrospectiva das 4 tias, Ishikawa, 5 Porquês e 5W2H.")
+st.caption("Simulador didático de Scrum com Histórias, tarefas, Sprint Review, Retrospectiva das 4 tias, Ishikawa, 5 Porquês e 5W2H.")
