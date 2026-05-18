@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -92,7 +91,7 @@ def categoria_numerica(valor):
 
 
 @st.cache_data
-def gerar_base_treino(n=900, seed=42):
+def gerar_base_treino_exemplo(n=900, seed=42):
     rng = np.random.default_rng(seed)
     linhas = []
 
@@ -165,7 +164,7 @@ def gerar_base_treino(n=900, seed=42):
 
 
 @st.cache_data
-def gerar_base_atual():
+def gerar_base_demandas_exemplo():
     return pd.DataFrame(
         [
             ["ATUAL-001", "Atualização de firewall crítico", "Segurança da Informação", "Alto", "Alta", "Alto", "Alto", 150000, 5000, 35],
@@ -196,46 +195,34 @@ def gerar_base_atual():
     )
 
 
-@st.cache_data
-def carregar_csv_ou_gerar(caminho, tipo):
-    arquivo = Path(caminho)
-    if arquivo.exists():
-        return pd.read_csv(arquivo)
-    if tipo == "treino":
-        return gerar_base_treino()
-    if tipo == "atual":
-        return gerar_base_atual()
-    raise ValueError("Tipo de base inválido.")
-
-
 def escore_referencia(row):
-    impacto = CATEGORIAS[row["impacto_negocio"]]
-    urgencia = CATEGORIAS[row["urgencia"]]
-    risco = CATEGORIAS[row["risco_operacional"]]
-    alinhamento = CATEGORIAS[row["alinhamento_estrategico"]]
-    custo = row["custo_estimado"]
-    usuarios = row["usuarios_afetados"]
-
     escore = (
-        1.8 * impacto
-        + 1.4 * urgencia
-        + 1.6 * risco
-        + 1.8 * alinhamento
-        + min(usuarios / 1200, 2.0)
-        - min(custo / 200000, 1.8)
+        1.8 * CATEGORIAS[row["impacto_negocio"]]
+        + 1.4 * CATEGORIAS[row["urgencia"]]
+        + 1.6 * CATEGORIAS[row["risco_operacional"]]
+        + 1.8 * CATEGORIAS[row["alinhamento_estrategico"]]
+        + min(row["usuarios_afetados"] / 1200, 2.0)
+        - min(row["custo_estimado"] / 200000, 1.8)
     )
     return round(escore, 2)
 
 
-def classificacao_referencia(escore):
+def decisao_referencia(escore):
     return "APROVAR pedido" if escore >= 8.7 else "REJEITAR pedido"
 
 
-def validar_colunas(df, nome_base):
+def validar_base_treino(df):
+    faltantes = [c for c in COLUNAS_MODELO + ["aprovado_historico"] if c not in df.columns]
+    if faltantes:
+        return False, faltantes
+    return True, []
+
+
+def validar_base_demandas(df):
     faltantes = [c for c in COLUNAS_MODELO if c not in df.columns]
     if faltantes:
-        st.error(f"A base {nome_base} está sem as colunas: {', '.join(faltantes)}")
-        st.stop()
+        return False, faltantes
+    return True, []
 
 
 def treinar_modelo(df_treino, algoritmo):
@@ -276,50 +263,34 @@ def obter_importancias(model):
     nomes = nomes_cat + COLUNAS_NUMERICAS
     imp = clf.feature_importances_
 
-    df_imp = pd.DataFrame({"variavel": nomes, "importancia": imp})
-    return df_imp.sort_values("importancia", ascending=False).head(15)
+    return (
+        pd.DataFrame({"variavel": nomes, "importancia": imp})
+        .sort_values("importancia", ascending=False)
+        .head(15)
+    )
 
 
-def aplicar_modelo(model, df_atual):
-    df = df_atual.copy()
+def aplicar_modelo(model, df_demandas):
+    df = df_demandas.copy()
     prob = model.predict_proba(df[COLUNAS_MODELO])[:, 1]
     pred = (prob >= 0.5).astype(int)
 
     df["probabilidade_aprovacao_ia"] = np.round(prob, 3)
     df["decisao_da_ia"] = np.where(pred == 1, "APROVAR pedido", "REJEITAR pedido")
     df["escore_referencia_governanca"] = df.apply(escore_referencia, axis=1)
-    df["decisao_referencia_governanca"] = df["escore_referencia_governanca"].apply(classificacao_referencia)
+    df["decisao_referencia_governanca"] = df["escore_referencia_governanca"].apply(decisao_referencia)
     df["alerta_governanca"] = np.where(
         df["decisao_da_ia"] != df["decisao_referencia_governanca"],
         "Divergência relevante",
         "Sem divergência evidente",
     )
-    df["percepcao_didatica"] = np.where(
-        df["alerta_governanca"] == "Divergência relevante",
-        "Investigar possível viés ou falha de governança",
-        "Decisão aparentemente coerente com a referência",
-    )
     return df
-
-
-def estilo_decisao(valor):
-    if valor == "APROVAR pedido":
-        return "background-color: #d1fae5; color: #065f46; font-weight: 800;"
-    if valor == "REJEITAR pedido":
-        return "background-color: #fee2e2; color: #991b1b; font-weight: 800;"
-    return ""
-
-
-def estilo_alerta(valor):
-    if valor == "Divergência relevante":
-        return "background-color: #fef3c7; color: #92400e; font-weight: 800;"
-    return ""
 
 
 def gerar_relatorio_texto(resultado):
     total = len(resultado)
     divergencias = resultado[resultado["alerta_governanca"] == "Divergência relevante"]
-    prior_area = (
+    taxa_area = (
         resultado.groupby("area_solicitante")["decisao_da_ia"]
         .apply(lambda s: (s == "APROVAR pedido").mean())
         .sort_values(ascending=False)
@@ -329,23 +300,23 @@ def gerar_relatorio_texto(resultado):
         "# Relatório preliminar de governança",
         "",
         f"Total de demandas analisadas: {total}.",
-        f"Divergências relevantes entre a IA e a referência de governança: {len(divergencias)}.",
+        f"Divergências relevantes entre a IA e a referência didática de governança: {len(divergencias)}.",
         "",
         "## Áreas aparentemente favorecidas pela IA",
     ]
 
-    for area in prior_area.head(3).index.tolist():
-        linhas.append(f"- {area}: {prior_area[area]:.0%} das demandas aprovadas pela IA.")
+    for area in taxa_area.head(3).index.tolist():
+        linhas.append(f"- {area}: {taxa_area[area]:.0%} dos pedidos aprovados pela IA.")
 
     linhas.append("")
-    linhas.append("## Áreas aparentemente subpriorizadas pela IA")
-    for area in prior_area.tail(3).index.tolist():
-        linhas.append(f"- {area}: {prior_area[area]:.0%} das demandas aprovadas pela IA.")
+    linhas.append("## Áreas aparentemente prejudicadas pela IA")
+    for area in taxa_area.tail(3).index.tolist():
+        linhas.append(f"- {area}: {taxa_area[area]:.0%} dos pedidos aprovados pela IA.")
 
     linhas.append("")
-    linhas.append("## Demandas com divergência relevante")
+    linhas.append("## Pedidos com divergência relevante")
     if divergencias.empty:
-        linhas.append("- Nenhuma divergência foi detectada pelos critérios didáticos adotados.")
+        linhas.append("- Nenhuma divergência detectada pelos critérios didáticos.")
     else:
         for _, row in divergencias.iterrows():
             linhas.append(
@@ -357,334 +328,335 @@ def gerar_relatorio_texto(resultado):
         [
             "",
             "## Práticas de governança recomendadas",
-            "- Definir política de governança para uso de IA em decisões de TI.",
-            "- Estabelecer papéis: dono do processo, dono dos dados, dono do modelo e comitê aprovador.",
-            "- Exigir avaliação de qualidade, representatividade e viés dos dados antes do treinamento.",
-            "- Definir critérios de aprovação alinhados à estratégia, risco e valor.",
-            "- Implantar revisão humana obrigatória para decisões de alto impacto.",
-            "- Monitorar indicadores de desempenho, equidade, explicabilidade e aderência à política.",
-            "- Auditar periodicamente os modelos e as decisões automatizadas.",
+            "- Política de governança para uso de IA em decisões de TI.",
+            "- Curadoria, qualidade, representatividade e linhagem dos dados.",
+            "- Avaliação de viés antes da implantação.",
+            "- Revisão humana obrigatória para decisões de alto impacto.",
+            "- Comitê de aprovação para sistemas de IA usados em decisões corporativas.",
+            "- Monitoramento periódico de desempenho, equidade, risco e aderência estratégica.",
+            "- Auditoria periódica do modelo e das decisões automatizadas.",
         ]
     )
     return "\n".join(linhas)
 
 
 st.title("⚖️ Laboratório de Governança Corporativa de TI com IA")
-st.caption("Sistema didático para demonstrar como dados de treino enviesados podem levar uma IA a aprovar ou rejeitar pedidos de TI de forma inadequada.")
+st.caption("Sistema didático: a IA recomenda APROVAR ou REJEITAR pedidos de TI, permitindo discutir viés, risco e governança.")
 
 with st.sidebar:
     st.header("Configurações")
     algoritmo = st.selectbox("Modelo supervisionado", ["Árvore de Decisão", "Random Forest"])
     mostrar_referencia = st.checkbox("Mostrar referência didática de governança", value=True)
+
     st.divider()
-    st.info(
-        "O ponto central da atividade é observar pedidos aprovados ou rejeitados pela IA e questionar se a decisão faz sentido sob a ótica da governança."
+    st.subheader("Bases de exemplo")
+    st.write("O sistema não carrega dados automaticamente. Use estes arquivos apenas se desejar uma base didática pronta.")
+
+    base_treino_exemplo = gerar_base_treino_exemplo()
+    base_demandas_exemplo = gerar_base_demandas_exemplo()
+
+    st.download_button(
+        "Baixar base de treino exemplo",
+        data=base_treino_exemplo.to_csv(index=False).encode("utf-8"),
+        file_name="base_treino_enviesada.csv",
+        mime="text/csv",
+    )
+
+    st.download_button(
+        "Baixar base de demandas atuais exemplo",
+        data=base_demandas_exemplo.to_csv(index=False).encode("utf-8"),
+        file_name="base_demandas_atuais.csv",
+        mime="text/csv",
     )
 
 abas = st.tabs(
     [
         "1. Contexto",
-        "2. Dados e treinamento",
-        "3. Decisão da IA",
-        "4. Análise do viés",
-        "5. Diagnóstico de governança",
-        "6. Apresentação da equipe",
+        "2. Carregar dados",
+        "3. Treinamento",
+        "4. Decisão da IA",
+        "5. Análise do viés",
+        "6. Governança",
+        "7. Apresentação",
     ]
 )
 
-df_treino = carregar_csv_ou_gerar("base_treino_enviesada.csv", "treino")
-df_atual = carregar_csv_ou_gerar("base_demandas_atuais.csv", "atual")
-validar_colunas(df_treino, "de treino")
-validar_colunas(df_atual, "de demandas atuais")
-
-if "aprovado_historico" not in df_treino.columns:
-    st.error("A base de treino precisa ter a coluna aprovado_historico.")
-    st.stop()
-
-model = treinar_modelo(df_treino, algoritmo)
-resultado = aplicar_modelo(model, df_atual)
+if "df_treino" not in st.session_state:
+    st.session_state.df_treino = None
+if "df_demandas" not in st.session_state:
+    st.session_state.df_demandas = None
+if "model" not in st.session_state:
+    st.session_state.model = None
+if "resultado" not in st.session_state:
+    st.session_state.resultado = None
 
 with abas[0]:
     st.subheader("Caso de negócio")
+
     st.markdown(
         """
         Uma organização implantou um sistema de IA para apoiar o Comitê de Governança de TI na decisão sobre pedidos de investimento.
-        Para cada demanda, a IA recomenda uma decisão objetiva:
+        Para cada demanda, a IA deve recomendar uma decisão objetiva:
 
         **APROVAR pedido** ou **REJEITAR pedido**.
 
-        O modelo foi treinado com dados históricos de aprovações. Porém, a base histórica contém um viés: algumas áreas receberam
-        mais aprovações no passado, independentemente do real impacto estratégico, risco operacional ou número de usuários afetados.
+        A proposta didática é usar uma base histórica enviesada. Algumas áreas foram mais aprovadas no passado,
+        independentemente do real impacto estratégico, do risco operacional ou do número de usuários afetados.
 
-        A tarefa das equipes é observar as decisões da IA, identificar pedidos que foram aprovados ou rejeitados de maneira incoerente
-        e propor práticas de governança para evitar esse tipo de falha.
+        Os alunos devem perceber se a IA está rejeitando pedidos críticos ou aprovando pedidos menos relevantes por causa do padrão histórico aprendido.
         """
     )
 
     st.warning(
-        "Atenção: o objetivo do laboratório é fazer os alunos perceberem que uma IA pode rejeitar pedidos críticos e aprovar pedidos menos relevantes quando aprende padrões históricos enviesados."
+        "Nesta versão, nenhum dado é carregado automaticamente. O professor ou os alunos precisam carregar a base de treino e a base de demandas atuais."
     )
 
 with abas[1]:
-    st.subheader("Carregamento das bases")
+    st.subheader("Carregar bases de dados")
 
     col1, col2 = st.columns(2)
+
     with col1:
-        treino_upload = st.file_uploader("Base de treino enviesada — opcional", type=["csv"], key="treino")
+        arquivo_treino = st.file_uploader(
+            "1. Carregue a base de treino histórica",
+            type=["csv"],
+            key="upload_treino",
+        )
+
     with col2:
-        atual_upload = st.file_uploader("Base de demandas atuais — opcional", type=["csv"], key="atual")
+        arquivo_demandas = st.file_uploader(
+            "2. Carregue a base de demandas atuais",
+            type=["csv"],
+            key="upload_demandas",
+        )
 
-    if treino_upload is not None:
-        df_treino = pd.read_csv(treino_upload)
-        validar_colunas(df_treino, "de treino enviada")
-        model = treinar_modelo(df_treino, algoritmo)
-        resultado = aplicar_modelo(model, df_atual)
+    if arquivo_treino is not None:
+        df_treino = pd.read_csv(arquivo_treino)
+        ok, faltantes = validar_base_treino(df_treino)
+        if not ok:
+            st.error(f"A base de treino está sem as colunas: {', '.join(faltantes)}")
+        else:
+            st.session_state.df_treino = df_treino
+            st.success("Base de treino carregada com sucesso.")
+            st.dataframe(df_treino.head(20), use_container_width=True)
 
-    if atual_upload is not None:
-        df_atual = pd.read_csv(atual_upload)
-        validar_colunas(df_atual, "de demandas atuais enviada")
-        resultado = aplicar_modelo(model, df_atual)
+    if arquivo_demandas is not None:
+        df_demandas = pd.read_csv(arquivo_demandas)
+        ok, faltantes = validar_base_demandas(df_demandas)
+        if not ok:
+            st.error(f"A base de demandas atuais está sem as colunas: {', '.join(faltantes)}")
+        else:
+            st.session_state.df_demandas = df_demandas
+            st.success("Base de demandas atuais carregada com sucesso.")
+            st.dataframe(df_demandas, use_container_width=True)
 
-    st.success(
-        "Base de demandas atuais carregada. Acesse a aba '3. Decisão da IA' para visualizar, de forma explícita, quais pedidos foram APROVADOS ou REJEITADOS."
+    st.info(
+        "Depois de carregar as duas bases, vá para a aba '3. Treinamento' e clique no botão para treinar o modelo."
     )
-
-    st.write("Amostra da base de treino")
-    st.dataframe(df_treino.head(20), use_container_width=True)
-
-    st.write("Demandas atuais carregadas")
-    st.dataframe(df_atual, use_container_width=True)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        df_treino[COLUNAS_MODELO],
-        df_treino["aprovado_historico"],
-        test_size=0.25,
-        random_state=42,
-        stratify=df_treino["aprovado_historico"],
-    )
-
-    df_treino_eval = df_treino.loc[X_train.index].copy()
-    model_eval = treinar_modelo(df_treino_eval, algoritmo)
-    y_pred = model_eval.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    cm = confusion_matrix(y_test, y_pred)
-
-    st.subheader("Métricas técnicas do modelo")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Acurácia em teste", f"{acc:.1%}")
-    c2.metric("Registros de treino", len(df_treino))
-    c3.metric("Taxa histórica de aprovação", f"{df_treino['aprovado_historico'].mean():.1%}")
-
-    st.warning(
-        "Uma boa métrica técnica não garante boa decisão de governança. O modelo pode ter aprendido a reproduzir aprovações históricas enviesadas."
-    )
-
-    st.write("Matriz de confusão")
-    st.dataframe(
-        pd.DataFrame(
-            cm,
-            index=["Real: Rejeitar", "Real: Aprovar"],
-            columns=["Pred: Rejeitar", "Pred: Aprovar"],
-        ),
-        use_container_width=True,
-    )
-
-    imp = obter_importancias(model)
-    if not imp.empty:
-        st.subheader("Variáveis que mais influenciaram o modelo")
-        st.dataframe(imp, use_container_width=True)
-
-        fig, ax = plt.subplots()
-        ax.barh(imp["variavel"], imp["importancia"])
-        ax.set_xlabel("Importância")
-        ax.set_ylabel("Variável")
-        ax.invert_yaxis()
-        st.pyplot(fig)
 
 with abas[2]:
-    st.subheader("Decisão explícita da IA: aprovar ou rejeitar pedidos")
+    st.subheader("Treinamento do modelo supervisionado")
 
-    total_aprovados = int((resultado["decisao_da_ia"] == "APROVAR pedido").sum())
-    total_rejeitados = int((resultado["decisao_da_ia"] == "REJEITAR pedido").sum())
-    total_divergencias = int((resultado["alerta_governanca"] == "Divergência relevante").sum())
+    if st.session_state.df_treino is None:
+        st.warning("Carregue primeiro a base de treino na aba '2. Carregar dados'.")
+    else:
+        df_treino = st.session_state.df_treino
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Pedidos aprovados pela IA", total_aprovados)
-    m2.metric("Pedidos rejeitados pela IA", total_rejeitados)
-    m3.metric("Sinais de possível viés", total_divergencias)
+        st.write("Resumo da base de treino carregada")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Registros", len(df_treino))
+        c2.metric("Pedidos aprovados no histórico", int(df_treino["aprovado_historico"].sum()))
+        c3.metric("Taxa histórica de aprovação", f"{df_treino['aprovado_historico'].mean():.1%}")
 
-    st.markdown(
-        """
-        A tabela abaixo é o principal ponto da atividade. Os alunos devem observar a coluna **DECISÃO DA IA** e avaliar:
-        a IA está aprovando pedidos de menor criticidade? Está rejeitando pedidos de alto impacto, alto risco ou alto alinhamento estratégico?
-        """
-    )
+        if st.button("Treinar modelo com a base histórica carregada", type="primary"):
+            model = treinar_modelo(df_treino, algoritmo)
+            st.session_state.model = model
 
-    colunas_visao_executiva = [
-        "id_demanda",
-        "demanda",
-        "area_solicitante",
-        "impacto_negocio",
-        "urgencia",
-        "risco_operacional",
-        "alinhamento_estrategico",
-        "custo_estimado",
-        "usuarios_afetados",
-        "probabilidade_aprovacao_ia",
-        "decisao_da_ia",
-    ]
-
-    if mostrar_referencia:
-        colunas_visao_executiva += [
-            "escore_referencia_governanca",
-            "decisao_referencia_governanca",
-            "alerta_governanca",
-            "percepcao_didatica",
-        ]
-
-    st.dataframe(
-        resultado[colunas_visao_executiva]
-        .style
-        .applymap(estilo_decisao, subset=["decisao_da_ia"])
-        .applymap(estilo_decisao, subset=["decisao_referencia_governanca"] if "decisao_referencia_governanca" in colunas_visao_executiva else [])
-        .applymap(estilo_alerta, subset=["alerta_governanca"] if "alerta_governanca" in colunas_visao_executiva else []),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    st.subheader("Leitura executiva das decisões")
-    for _, row in resultado.iterrows():
-        if row["decisao_da_ia"] == "APROVAR pedido":
-            st.success(
-                f"{row['id_demanda']} — IA recomenda APROVAR pedido: {row['demanda']} | Área: {row['area_solicitante']} | Probabilidade: {row['probabilidade_aprovacao_ia']:.0%}"
-            )
-        else:
-            st.error(
-                f"{row['id_demanda']} — IA recomenda REJEITAR pedido: {row['demanda']} | Área: {row['area_solicitante']} | Probabilidade de aprovação: {row['probabilidade_aprovacao_ia']:.0%}"
+            X_train, X_test, y_train, y_test = train_test_split(
+                df_treino[COLUNAS_MODELO],
+                df_treino["aprovado_historico"],
+                test_size=0.25,
+                random_state=42,
+                stratify=df_treino["aprovado_historico"],
             )
 
-    csv_resultado = resultado.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Baixar decisões da IA em CSV",
-        data=csv_resultado,
-        file_name="decisoes_ia_aprovar_rejeitar.csv",
-        mime="text/csv",
-    )
+            model_eval = treinar_modelo(df_treino.loc[X_train.index].copy(), algoritmo)
+            y_pred = model_eval.predict(X_test)
+
+            st.success("Modelo treinado com sucesso.")
+
+            acc = accuracy_score(y_test, y_pred)
+            cm = confusion_matrix(y_test, y_pred)
+
+            m1, m2 = st.columns(2)
+            m1.metric("Acurácia em teste", f"{acc:.1%}")
+            m2.metric("Algoritmo utilizado", algoritmo)
+
+            st.warning(
+                "Acurácia técnica não significa boa governança. O modelo pode estar apenas reproduzindo o viés histórico da organização."
+            )
+
+            st.write("Matriz de confusão")
+            st.dataframe(
+                pd.DataFrame(
+                    cm,
+                    index=["Real: Rejeitar", "Real: Aprovar"],
+                    columns=["Pred: Rejeitar", "Pred: Aprovar"],
+                ),
+                use_container_width=True,
+            )
+
+            imp = obter_importancias(model)
+            if not imp.empty:
+                st.write("Variáveis mais influentes")
+                st.dataframe(imp, use_container_width=True)
+
+                fig, ax = plt.subplots()
+                ax.barh(imp["variavel"], imp["importancia"])
+                ax.set_xlabel("Importância")
+                ax.set_ylabel("Variável")
+                ax.invert_yaxis()
+                st.pyplot(fig)
 
 with abas[3]:
-    st.subheader("Análise do viés percebido")
+    st.subheader("Decisão explícita da IA: APROVAR ou REJEITAR pedidos")
 
-    st.markdown(
-        """
-        Esta aba ajuda os alunos a perceberem se a IA está favorecendo algumas áreas e rejeitando outras,
-        independentemente da criticidade real dos pedidos.
-        """
-    )
-
-    resumo_area = (
-        resultado.assign(aprovada_ia=(resultado["decisao_da_ia"] == "APROVAR pedido").astype(int))
-        .groupby("area_solicitante")
-        .agg(
-            demandas=("id_demanda", "count"),
-            pedidos_aprovados_pela_ia=("aprovada_ia", "sum"),
-            taxa_aprovacao_ia=("aprovada_ia", "mean"),
-            media_probabilidade_aprovacao_ia=("probabilidade_aprovacao_ia", "mean"),
-            media_escore_governanca=("escore_referencia_governanca", "mean"),
-        )
-        .reset_index()
-        .sort_values("taxa_aprovacao_ia", ascending=False)
-    )
-
-    st.dataframe(resumo_area, use_container_width=True, hide_index=True)
-
-    fig2, ax2 = plt.subplots()
-    ax2.bar(resumo_area["area_solicitante"], resumo_area["taxa_aprovacao_ia"])
-    ax2.set_ylabel("Taxa de aprovação pela IA")
-    ax2.set_xlabel("Área solicitante")
-    ax2.tick_params(axis="x", rotation=70)
-    st.pyplot(fig2)
-
-    st.markdown("### Pedidos críticos rejeitados pela IA")
-    criticos_rejeitados = resultado[
-        (resultado["decisao_da_ia"] == "REJEITAR pedido")
-        & (
-            (resultado["impacto_negocio"] == "Alto")
-            | (resultado["risco_operacional"] == "Alto")
-            | (resultado["alinhamento_estrategico"] == "Alto")
-        )
-    ]
-
-    if criticos_rejeitados.empty:
-        st.info("Nenhum pedido crítico foi rejeitado pela IA neste conjunto.")
+    if st.session_state.model is None:
+        st.warning("Treine o modelo na aba '3. Treinamento'.")
+    elif st.session_state.df_demandas is None:
+        st.warning("Carregue a base de demandas atuais na aba '2. Carregar dados'.")
     else:
-        st.dataframe(
-            criticos_rejeitados[
-                [
-                    "id_demanda",
-                    "demanda",
-                    "area_solicitante",
-                    "impacto_negocio",
-                    "urgencia",
-                    "risco_operacional",
-                    "alinhamento_estrategico",
-                    "decisao_da_ia",
-                    "decisao_referencia_governanca",
-                    "alerta_governanca",
-                ]
-            ]
-            .style
-            .applymap(estilo_decisao, subset=["decisao_da_ia", "decisao_referencia_governanca"])
-            .applymap(estilo_alerta, subset=["alerta_governanca"]),
-            use_container_width=True,
-            hide_index=True,
+        resultado = aplicar_modelo(st.session_state.model, st.session_state.df_demandas)
+        st.session_state.resultado = resultado
+
+        total_aprovados = int((resultado["decisao_da_ia"] == "APROVAR pedido").sum())
+        total_rejeitados = int((resultado["decisao_da_ia"] == "REJEITAR pedido").sum())
+        total_divergencias = int((resultado["alerta_governanca"] == "Divergência relevante").sum())
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Pedidos aprovados pela IA", total_aprovados)
+        m2.metric("Pedidos rejeitados pela IA", total_rejeitados)
+        m3.metric("Sinais de possível viés", total_divergencias)
+
+        st.markdown(
+            """
+            Abaixo está o ponto central da atividade. Os alunos devem observar as decisões da IA e questionar:
+            **a IA aprovou pedidos menos críticos? A IA rejeitou pedidos críticos? Alguma área foi favorecida ou prejudicada?**
+            """
         )
 
-    st.markdown("### Pedidos menos críticos aprovados pela IA")
-    menos_criticos_aprovados = resultado[
-        (resultado["decisao_da_ia"] == "APROVAR pedido")
-        & (resultado["impacto_negocio"].isin(["Baixo", "Médio"]))
-        & (resultado["risco_operacional"].isin(["Baixo", "Médio"]))
-        & (resultado["alinhamento_estrategico"].isin(["Baixo", "Médio"]))
-    ]
+        colunas = [
+            "id_demanda",
+            "demanda",
+            "area_solicitante",
+            "impacto_negocio",
+            "urgencia",
+            "risco_operacional",
+            "alinhamento_estrategico",
+            "custo_estimado",
+            "usuarios_afetados",
+            "probabilidade_aprovacao_ia",
+            "decisao_da_ia",
+        ]
 
-    if menos_criticos_aprovados.empty:
-        st.info("Nenhum pedido menos crítico foi aprovado pela IA neste conjunto.")
-    else:
-        st.dataframe(
-            menos_criticos_aprovados[
-                [
-                    "id_demanda",
-                    "demanda",
-                    "area_solicitante",
-                    "impacto_negocio",
-                    "urgencia",
-                    "risco_operacional",
-                    "alinhamento_estrategico",
-                    "decisao_da_ia",
-                    "decisao_referencia_governanca",
-                    "alerta_governanca",
-                ]
+        if mostrar_referencia:
+            colunas += [
+                "escore_referencia_governanca",
+                "decisao_referencia_governanca",
+                "alerta_governanca",
             ]
-            .style
-            .applymap(estilo_decisao, subset=["decisao_da_ia", "decisao_referencia_governanca"])
-            .applymap(estilo_alerta, subset=["alerta_governanca"]),
-            use_container_width=True,
-            hide_index=True,
+
+        st.dataframe(resultado[colunas], use_container_width=True, hide_index=True)
+
+        st.subheader("Leitura executiva das decisões")
+        for _, row in resultado.iterrows():
+            texto = (
+                f"**{row['id_demanda']} — {row['demanda']}**  \n"
+                f"Área: {row['area_solicitante']} | Impacto: {row['impacto_negocio']} | "
+                f"Urgência: {row['urgencia']} | Risco: {row['risco_operacional']} | "
+                f"Alinhamento: {row['alinhamento_estrategico']} | "
+                f"Probabilidade de aprovação pela IA: {row['probabilidade_aprovacao_ia']:.0%}"
+            )
+
+            if row["decisao_da_ia"] == "APROVAR pedido":
+                st.success(f"✅ IA recomenda **APROVAR pedido**\n\n{texto}")
+            else:
+                st.error(f"⛔ IA recomenda **REJEITAR pedido**\n\n{texto}")
+
+        st.download_button(
+            "Baixar decisões da IA em CSV",
+            data=resultado.to_csv(index=False).encode("utf-8"),
+            file_name="decisoes_ia_aprovar_rejeitar.csv",
+            mime="text/csv",
         )
 
 with abas[4]:
+    st.subheader("Análise do viés")
+
+    if st.session_state.resultado is None:
+        st.warning("Gere primeiro as decisões da IA na aba '4. Decisão da IA'.")
+    else:
+        resultado = st.session_state.resultado
+
+        resumo_area = (
+            resultado.assign(aprovada_ia=(resultado["decisao_da_ia"] == "APROVAR pedido").astype(int))
+            .groupby("area_solicitante")
+            .agg(
+                demandas=("id_demanda", "count"),
+                pedidos_aprovados_pela_ia=("aprovada_ia", "sum"),
+                taxa_aprovacao_ia=("aprovada_ia", "mean"),
+                media_probabilidade_aprovacao_ia=("probabilidade_aprovacao_ia", "mean"),
+                media_escore_governanca=("escore_referencia_governanca", "mean"),
+            )
+            .reset_index()
+            .sort_values("taxa_aprovacao_ia", ascending=False)
+        )
+
+        st.write("Taxa de aprovação por área solicitante")
+        st.dataframe(resumo_area, use_container_width=True, hide_index=True)
+
+        fig, ax = plt.subplots()
+        ax.bar(resumo_area["area_solicitante"], resumo_area["taxa_aprovacao_ia"])
+        ax.set_ylabel("Taxa de aprovação pela IA")
+        ax.set_xlabel("Área solicitante")
+        ax.tick_params(axis="x", rotation=70)
+        st.pyplot(fig)
+
+        st.markdown("### Pedidos críticos rejeitados pela IA")
+        criticos_rejeitados = resultado[
+            (resultado["decisao_da_ia"] == "REJEITAR pedido")
+            & (
+                (resultado["impacto_negocio"] == "Alto")
+                | (resultado["risco_operacional"] == "Alto")
+                | (resultado["alinhamento_estrategico"] == "Alto")
+            )
+        ]
+
+        if criticos_rejeitados.empty:
+            st.info("Nenhum pedido crítico foi rejeitado pela IA neste conjunto.")
+        else:
+            st.dataframe(criticos_rejeitados, use_container_width=True, hide_index=True)
+
+        st.markdown("### Pedidos menos críticos aprovados pela IA")
+        menos_criticos_aprovados = resultado[
+            (resultado["decisao_da_ia"] == "APROVAR pedido")
+            & (resultado["impacto_negocio"].isin(["Baixo", "Médio"]))
+            & (resultado["risco_operacional"].isin(["Baixo", "Médio"]))
+            & (resultado["alinhamento_estrategico"].isin(["Baixo", "Médio"]))
+        ]
+
+        if menos_criticos_aprovados.empty:
+            st.info("Nenhum pedido menos crítico foi aprovado pela IA neste conjunto.")
+        else:
+            st.dataframe(menos_criticos_aprovados, use_container_width=True, hide_index=True)
+
+with abas[5]:
     st.subheader("Diagnóstico de governança")
 
-    divergencias = resultado[resultado["alerta_governanca"] == "Divergência relevante"]
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Demandas analisadas", len(resultado))
-    c2.metric("Divergências relevantes", len(divergencias))
-    c3.metric("Percentual com divergência", f"{len(divergencias) / len(resultado):.1%}")
-
-    st.markdown("### Perguntas orientadoras")
     st.markdown(
         """
+        ### Perguntas orientadoras
+
         1. Quais pedidos a IA mandou **rejeitar**, apesar de terem alto impacto, alto risco ou alto alinhamento estratégico?
         2. Quais pedidos a IA mandou **aprovar**, apesar de parecerem menos críticos?
         3. Quais áreas parecem favorecidas pela IA?
@@ -734,18 +706,17 @@ with abas[4]:
         hide_index=True,
     )
 
-    relatorio = gerar_relatorio_texto(resultado)
-    st.download_button(
-        "Baixar relatório preliminar em Markdown",
-        data=relatorio.encode("utf-8"),
-        file_name="relatorio_preliminar_governanca.md",
-        mime="text/markdown",
-    )
+    if st.session_state.resultado is not None:
+        relatorio = gerar_relatorio_texto(st.session_state.resultado)
+        st.download_button(
+            "Baixar relatório preliminar em Markdown",
+            data=relatorio.encode("utf-8"),
+            file_name="relatorio_preliminar_governanca.md",
+            mime="text/markdown",
+        )
 
-with abas[5]:
+with abas[6]:
     st.subheader("Roteiro da apresentação da equipe")
-
-    st.markdown("Cada equipe deve preparar uma apresentação executiva de 5 a 7 minutos.")
 
     st.dataframe(
         pd.DataFrame(
@@ -761,19 +732,6 @@ with abas[5]:
         ),
         use_container_width=True,
         hide_index=True,
-    )
-
-    st.markdown("### Critérios de avaliação sugeridos")
-    st.markdown(
-        """
-        - Clareza na identificação dos pedidos aprovados e rejeitados pela IA.
-        - Capacidade de identificar rejeições de pedidos críticos e aprovações de pedidos menos relevantes.
-        - Capacidade de relacionar o problema a dados enviesados.
-        - Qualidade da análise de riscos.
-        - Coerência das práticas de governança propostas.
-        - Uso adequado de conceitos de COBIT, governança de dados, accountability e monitoramento.
-        - Postura executiva na apresentação.
-        """
     )
 
     st.success(
