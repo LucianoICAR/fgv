@@ -26,6 +26,7 @@ CATEGORIAS = {
 }
 
 COLUNAS_MODELO = [
+    "fonte_do_pedido",
     "area_solicitante",
     "impacto_negocio",
     "urgencia",
@@ -33,10 +34,10 @@ COLUNAS_MODELO = [
     "alinhamento_estrategico",
     "custo_estimado",
     "usuarios_afetados",
-    "historico_aprovacoes_area",
 ]
 
 COLUNAS_CATEGORICAS = [
+    "fonte_do_pedido",
     "area_solicitante",
     "impacto_negocio",
     "urgencia",
@@ -47,168 +48,11 @@ COLUNAS_CATEGORICAS = [
 COLUNAS_NUMERICAS = [
     "custo_estimado",
     "usuarios_afetados",
-    "historico_aprovacoes_area",
-]
-
-AREAS = [
-    "Diretoria",
-    "Financeiro",
-    "Operações",
-    "Comercial",
-    "Recursos Humanos",
-    "Jurídico",
-    "Atendimento ao Cliente",
-    "Segurança da Informação",
-    "Logística",
-]
-
-DEMANDAS = [
-    "Atualização de firewall crítico",
-    "Automação de relatório gerencial",
-    "Correção de falhas no sistema de atendimento",
-    "Implantação de chatbot interno",
-    "Adequação à LGPD",
-    "Modernização de servidores",
-    "Dashboard executivo",
-    "Integração com sistema legado",
-    "Monitoramento de incidentes de segurança",
-    "Portal de autosserviço para colaboradores",
-    "Rastreabilidade logística",
-    "Redução de indisponibilidade de aplicação crítica",
-    "Revisão de controles de acesso",
-    "Automação de conciliação financeira",
-    "Sistema de priorização de chamados",
-    "Melhoria no cadastro de clientes",
-    "Migração de banco de dados",
-    "Controle de contratos jurídicos",
-    "Aplicativo para equipe de campo",
-    "Gestão de vulnerabilidades",
 ]
 
 
-def categoria_numerica(valor):
+def n_cat(valor):
     return CATEGORIAS[valor]
-
-
-@st.cache_data
-def gerar_base_treino_exemplo(n=900, seed=42):
-    rng = np.random.default_rng(seed)
-    linhas = []
-
-    for i in range(n):
-        area = rng.choice(
-            AREAS,
-            p=[0.12, 0.15, 0.14, 0.11, 0.09, 0.08, 0.11, 0.10, 0.10],
-        )
-        impacto = rng.choice(["Baixo", "Médio", "Alto"], p=[0.25, 0.45, 0.30])
-        urgencia = rng.choice(["Baixa", "Média", "Alta"], p=[0.30, 0.45, 0.25])
-        risco = rng.choice(["Baixo", "Médio", "Alto"], p=[0.35, 0.40, 0.25])
-        alinhamento = rng.choice(["Baixo", "Médio", "Alto"], p=[0.25, 0.45, 0.30])
-        custo = int(rng.choice([20000, 35000, 50000, 75000, 100000, 150000, 220000, 300000]))
-        usuarios = int(rng.choice([30, 80, 150, 300, 600, 1200, 2500, 5000]))
-
-        historico_aprovacoes_area = {
-            "Diretoria": rng.integers(75, 96),
-            "Financeiro": rng.integers(70, 93),
-            "Operações": rng.integers(45, 75),
-            "Comercial": rng.integers(40, 70),
-            "Recursos Humanos": rng.integers(20, 50),
-            "Jurídico": rng.integers(25, 55),
-            "Atendimento ao Cliente": rng.integers(15, 45),
-            "Segurança da Informação": rng.integers(20, 55),
-            "Logística": rng.integers(25, 60),
-        }[area]
-
-        escore_governanca = (
-            1.8 * categoria_numerica(impacto)
-            + 1.4 * categoria_numerica(urgencia)
-            + 1.6 * categoria_numerica(risco)
-            + 1.8 * categoria_numerica(alinhamento)
-            + min(usuarios / 1200, 2.0)
-            - min(custo / 200000, 1.8)
-        )
-
-        vies_area = {
-            "Diretoria": 3.2,
-            "Financeiro": 2.6,
-            "Operações": 0.5,
-            "Comercial": 0.2,
-            "Recursos Humanos": -0.8,
-            "Jurídico": -0.4,
-            "Atendimento ao Cliente": -1.4,
-            "Segurança da Informação": -1.1,
-            "Logística": -0.6,
-        }[area]
-
-        ruido = rng.normal(0, 0.8)
-        escore_enviesado = escore_governanca + vies_area + 0.04 * historico_aprovacoes_area + ruido
-        aprovado_historico = 1 if escore_enviesado >= 9.4 else 0
-
-        linhas.append(
-            {
-                "id_demanda": f"HIST-{i+1:04d}",
-                "demanda": rng.choice(DEMANDAS),
-                "area_solicitante": area,
-                "impacto_negocio": impacto,
-                "urgencia": urgencia,
-                "risco_operacional": risco,
-                "alinhamento_estrategico": alinhamento,
-                "custo_estimado": custo,
-                "usuarios_afetados": usuarios,
-                "historico_aprovacoes_area": historico_aprovacoes_area,
-                "aprovado_historico": aprovado_historico,
-            }
-        )
-
-    return pd.DataFrame(linhas)
-
-
-@st.cache_data
-def gerar_base_demandas_exemplo():
-    return pd.DataFrame(
-        [
-            ["ATUAL-001", "Atualização de firewall crítico", "Segurança da Informação", "Alto", "Alta", "Alto", "Alto", 150000, 5000, 35],
-            ["ATUAL-002", "Dashboard executivo", "Diretoria", "Médio", "Média", "Baixo", "Médio", 90000, 60, 91],
-            ["ATUAL-003", "Correção de falhas no sistema de atendimento", "Atendimento ao Cliente", "Alto", "Alta", "Alto", "Alto", 110000, 2500, 28],
-            ["ATUAL-004", "Automação de relatório gerencial", "Financeiro", "Médio", "Baixa", "Baixo", "Médio", 70000, 80, 88],
-            ["ATUAL-005", "Gestão de vulnerabilidades", "Segurança da Informação", "Alto", "Alta", "Alto", "Alto", 130000, 1200, 33],
-            ["ATUAL-006", "Portal de autosserviço para colaboradores", "Recursos Humanos", "Médio", "Média", "Médio", "Alto", 85000, 3000, 40],
-            ["ATUAL-007", "Automação de conciliação financeira", "Financeiro", "Médio", "Média", "Baixo", "Médio", 100000, 120, 86],
-            ["ATUAL-008", "Rastreabilidade logística", "Logística", "Alto", "Alta", "Alto", "Alto", 160000, 900, 44],
-            ["ATUAL-009", "Controle de contratos jurídicos", "Jurídico", "Médio", "Média", "Médio", "Médio", 75000, 100, 48],
-            ["ATUAL-010", "Redução de indisponibilidade de aplicação crítica", "Operações", "Alto", "Alta", "Alto", "Alto", 180000, 5000, 62],
-            ["ATUAL-011", "Melhoria no cadastro de clientes", "Comercial", "Alto", "Média", "Médio", "Alto", 95000, 1400, 58],
-            ["ATUAL-012", "Integração com sistema legado", "Operações", "Alto", "Média", "Alto", "Alto", 220000, 1800, 60],
-        ],
-        columns=[
-            "id_demanda",
-            "demanda",
-            "area_solicitante",
-            "impacto_negocio",
-            "urgencia",
-            "risco_operacional",
-            "alinhamento_estrategico",
-            "custo_estimado",
-            "usuarios_afetados",
-            "historico_aprovacoes_area",
-        ],
-    )
-
-
-def escore_referencia(row):
-    escore = (
-        1.8 * CATEGORIAS[row["impacto_negocio"]]
-        + 1.4 * CATEGORIAS[row["urgencia"]]
-        + 1.6 * CATEGORIAS[row["risco_operacional"]]
-        + 1.8 * CATEGORIAS[row["alinhamento_estrategico"]]
-        + min(row["usuarios_afetados"] / 1200, 2.0)
-        - min(row["custo_estimado"] / 200000, 1.8)
-    )
-    return round(escore, 2)
-
-
-def decisao_referencia(escore):
-    return "APROVAR pedido" if escore >= 8.7 else "REJEITAR pedido"
 
 
 def validar_base_treino(df):
@@ -225,6 +69,22 @@ def validar_base_demandas(df):
     return True, []
 
 
+def escore_referencia_negocio(row):
+    escore = (
+        2.0 * n_cat(row["impacto_negocio"])
+        + 1.8 * n_cat(row["urgencia"])
+        + 1.6 * n_cat(row["risco_operacional"])
+        + 1.7 * n_cat(row["alinhamento_estrategico"])
+        + min(row["usuarios_afetados"] / 1200, 2.0)
+        - min(row["custo_estimado"] / 220000, 1.6)
+    )
+    return round(escore, 2)
+
+
+def decisao_referencia(escore):
+    return "APROVAR pedido" if escore >= 9.2 else "REJEITAR pedido"
+
+
 def treinar_modelo(df_treino, algoritmo):
     X = df_treino[COLUNAS_MODELO]
     y = df_treino["aprovado_historico"]
@@ -239,7 +99,7 @@ def treinar_modelo(df_treino, algoritmo):
     if algoritmo == "Árvore de Decisão":
         clf = DecisionTreeClassifier(max_depth=5, random_state=42)
     else:
-        clf = RandomForestClassifier(n_estimators=120, max_depth=6, random_state=42)
+        clf = RandomForestClassifier(n_estimators=150, max_depth=6, random_state=42)
 
     model = Pipeline(
         steps=[
@@ -266,32 +126,50 @@ def obter_importancias(model):
     return (
         pd.DataFrame({"variavel": nomes, "importancia": imp})
         .sort_values("importancia", ascending=False)
-        .head(15)
+        .head(20)
     )
 
 
 def aplicar_modelo(model, df_demandas):
     df = df_demandas.copy()
+
     prob = model.predict_proba(df[COLUNAS_MODELO])[:, 1]
     pred = (prob >= 0.5).astype(int)
 
     df["probabilidade_aprovacao_ia"] = np.round(prob, 3)
     df["decisao_da_ia"] = np.where(pred == 1, "APROVAR pedido", "REJEITAR pedido")
-    df["escore_referencia_governanca"] = df.apply(escore_referencia, axis=1)
-    df["decisao_referencia_governanca"] = df["escore_referencia_governanca"].apply(decisao_referencia)
+
+    df["escore_referencia_negocio"] = df.apply(escore_referencia_negocio, axis=1)
+    df["decisao_referencia_negocio"] = df["escore_referencia_negocio"].apply(decisao_referencia)
+
     df["alerta_governanca"] = np.where(
-        df["decisao_da_ia"] != df["decisao_referencia_governanca"],
+        df["decisao_da_ia"] != df["decisao_referencia_negocio"],
         "Divergência relevante",
         "Sem divergência evidente",
     )
+
+    df["tipo_de_alerta"] = "Sem alerta"
+    df.loc[
+        (df["decisao_da_ia"] == "REJEITAR pedido")
+        & (df["decisao_referencia_negocio"] == "APROVAR pedido"),
+        "tipo_de_alerta",
+    ] = "IA rejeitou pedido relevante para o negócio"
+
+    df.loc[
+        (df["decisao_da_ia"] == "APROVAR pedido")
+        & (df["decisao_referencia_negocio"] == "REJEITAR pedido"),
+        "tipo_de_alerta",
+    ] = "IA aprovou pedido fraco para o negócio"
+
     return df
 
 
 def gerar_relatorio_texto(resultado):
     total = len(resultado)
     divergencias = resultado[resultado["alerta_governanca"] == "Divergência relevante"]
-    taxa_area = (
-        resultado.groupby("area_solicitante")["decisao_da_ia"]
+
+    taxa_fonte = (
+        resultado.groupby("fonte_do_pedido")["decisao_da_ia"]
         .apply(lambda s: (s == "APROVAR pedido").mean())
         .sort_values(ascending=False)
     )
@@ -299,19 +177,19 @@ def gerar_relatorio_texto(resultado):
     linhas = [
         "# Relatório preliminar de governança",
         "",
-        f"Total de demandas analisadas: {total}.",
-        f"Divergências relevantes entre a IA e a referência didática de governança: {len(divergencias)}.",
+        f"Total de pedidos analisados: {total}.",
+        f"Divergências relevantes entre a IA e a referência de negócio: {len(divergencias)}.",
         "",
-        "## Áreas aparentemente favorecidas pela IA",
+        "## Fontes/cargos aparentemente favorecidos pela IA",
     ]
 
-    for area in taxa_area.head(3).index.tolist():
-        linhas.append(f"- {area}: {taxa_area[area]:.0%} dos pedidos aprovados pela IA.")
+    for fonte in taxa_fonte.head(5).index.tolist():
+        linhas.append(f"- {fonte}: {taxa_fonte[fonte]:.0%} dos pedidos aprovados pela IA.")
 
     linhas.append("")
-    linhas.append("## Áreas aparentemente prejudicadas pela IA")
-    for area in taxa_area.tail(3).index.tolist():
-        linhas.append(f"- {area}: {taxa_area[area]:.0%} dos pedidos aprovados pela IA.")
+    linhas.append("## Fontes/cargos aparentemente prejudicados pela IA")
+    for fonte in taxa_fonte.tail(5).index.tolist():
+        linhas.append(f"- {fonte}: {taxa_fonte[fonte]:.0%} dos pedidos aprovados pela IA.")
 
     linhas.append("")
     linhas.append("## Pedidos com divergência relevante")
@@ -320,53 +198,49 @@ def gerar_relatorio_texto(resultado):
     else:
         for _, row in divergencias.iterrows():
             linhas.append(
-                f"- {row['id_demanda']} | {row['demanda']} | Área: {row['area_solicitante']} | "
-                f"IA: {row['decisao_da_ia']} | Referência: {row['decisao_referencia_governanca']}."
+                f"- {row['id_pedido']} | {row['pedido']} | Fonte: {row['fonte_do_pedido']} | "
+                f"Impacto: {row['impacto_negocio']} | Urgência: {row['urgencia']} | "
+                f"IA: {row['decisao_da_ia']} | Negócio: {row['decisao_referencia_negocio']} | "
+                f"Alerta: {row['tipo_de_alerta']}."
             )
 
     linhas.extend(
         [
             "",
+            "## Diagnóstico esperado",
+            "- A IA aprendeu uma cultura organizacional inadequada.",
+            "- A fonte/cargo do pedido passou a influenciar mais a decisão do que urgência e impacto no negócio.",
+            "- A organização automatizou um padrão político-hierárquico de atendimento.",
+            "- A decisão automatizada pode rejeitar pedidos críticos quando eles vêm de fontes menos prestigiadas.",
+            "- A decisão automatizada pode aprovar pedidos pouco relevantes quando eles vêm de cargos superiores.",
+            "",
             "## Práticas de governança recomendadas",
-            "- Política de governança para uso de IA em decisões de TI.",
-            "- Curadoria, qualidade, representatividade e linhagem dos dados.",
-            "- Avaliação de viés antes da implantação.",
-            "- Revisão humana obrigatória para decisões de alto impacto.",
-            "- Comitê de aprovação para sistemas de IA usados em decisões corporativas.",
-            "- Monitoramento periódico de desempenho, equidade, risco e aderência estratégica.",
-            "- Auditoria periódica do modelo e das decisões automatizadas.",
+            "- Definir critérios formais de priorização por valor, risco, urgência e alinhamento estratégico.",
+            "- Remover ou controlar variáveis com potencial discriminatório ou político, como fonte/cargo do pedido.",
+            "- Realizar avaliação de viés antes da implantação do modelo.",
+            "- Exigir validação independente por comitê de governança de TI.",
+            "- Implantar revisão humana para decisões de alto impacto.",
+            "- Monitorar taxa de aprovação por fonte, área, impacto e urgência.",
+            "- Auditar periodicamente decisões automatizadas e dados de treinamento.",
         ]
     )
+
     return "\n".join(linhas)
 
 
 st.title("⚖️ Laboratório de Governança Corporativa de TI com IA")
-st.caption("Sistema didático: a IA recomenda APROVAR ou REJEITAR pedidos de TI, permitindo discutir viés, risco e governança.")
+st.caption("Sistema didático: a IA aprende uma cultura enviesada que prioriza a fonte/cargo do pedido em vez do valor para o negócio.")
 
 with st.sidebar:
     st.header("Configurações")
     algoritmo = st.selectbox("Modelo supervisionado", ["Árvore de Decisão", "Random Forest"])
-    mostrar_referencia = st.checkbox("Mostrar referência didática de governança", value=True)
 
     st.divider()
-    st.subheader("Bases de exemplo")
-    st.write("O sistema não carrega dados automaticamente. Use estes arquivos apenas se desejar uma base didática pronta.")
-
-    base_treino_exemplo = gerar_base_treino_exemplo()
-    base_demandas_exemplo = gerar_base_demandas_exemplo()
-
-    st.download_button(
-        "Baixar base de treino exemplo",
-        data=base_treino_exemplo.to_csv(index=False).encode("utf-8"),
-        file_name="base_treino_enviesada.csv",
-        mime="text/csv",
-    )
-
-    st.download_button(
-        "Baixar base de demandas atuais exemplo",
-        data=base_demandas_exemplo.to_csv(index=False).encode("utf-8"),
-        file_name="base_demandas_atuais.csv",
-        mime="text/csv",
+    st.subheader("Arquivos esperados")
+    st.write("O sistema não gera bases de dados. Carregue os CSVs fornecidos pelo professor.")
+    st.code(
+        "base_treino_vies_cargo.csv\nbase_demandas_atuais_vies_cargo.csv",
+        language="text",
     )
 
 abas = st.tabs(
@@ -375,7 +249,7 @@ abas = st.tabs(
         "2. Carregar dados",
         "3. Treinamento",
         "4. Decisão da IA",
-        "5. Análise do viés",
+        "5. Evidências do viés",
         "6. Governança",
         "7. Apresentação",
     ]
@@ -395,20 +269,28 @@ with abas[0]:
 
     st.markdown(
         """
-        Uma organização implantou um sistema de IA para apoiar o Comitê de Governança de TI na decisão sobre pedidos de investimento.
-        Para cada demanda, a IA deve recomendar uma decisão objetiva:
+        Uma organização usa IA para decidir se pedidos de TI devem ser **aprovados** ou **rejeitados**.
 
-        **APROVAR pedido** ou **REJEITAR pedido**.
+        O problema é que a base histórica reflete uma cultura organizacional inadequada:
+        pedidos vindos de cargos mais altos foram atendidos com mais frequência, mesmo quando tinham baixa urgência
+        e baixo impacto no negócio. Já pedidos vindos de fontes operacionais foram rejeitados com mais frequência,
+        mesmo quando eram urgentes e relevantes.
 
-        A proposta didática é usar uma base histórica enviesada. Algumas áreas foram mais aprovadas no passado,
-        independentemente do real impacto estratégico, do risco operacional ou do número de usuários afetados.
-
-        Os alunos devem perceber se a IA está rejeitando pedidos críticos ou aprovando pedidos menos relevantes por causa do padrão histórico aprendido.
+        A IA aprende esse padrão histórico e passa a reproduzi-lo.
         """
     )
 
     st.warning(
-        "Nesta versão, nenhum dado é carregado automaticamente. O professor ou os alunos precisam carregar a base de treino e a base de demandas atuais."
+        "Objetivo didático: mostrar que o modelo pode aprender decisões erradas quando a organização usa dados históricos contaminados por cultura, hierarquia e poder político."
+    )
+
+    st.markdown(
+        """
+        **Hipótese que os alunos devem investigar**
+
+        A IA está considerando principalmente a **fonte/cargo do pedido** e não os critérios corretos de priorização:
+        urgência, impacto no negócio, risco operacional e alinhamento estratégico.
+        """
     )
 
 with abas[1]:
@@ -418,14 +300,14 @@ with abas[1]:
 
     with col1:
         arquivo_treino = st.file_uploader(
-            "1. Carregue a base de treino histórica",
+            "1. Carregue a base histórica de treino",
             type=["csv"],
             key="upload_treino",
         )
 
     with col2:
         arquivo_demandas = st.file_uploader(
-            "2. Carregue a base de demandas atuais",
+            "2. Carregue a base de pedidos atuais",
             type=["csv"],
             key="upload_demandas",
         )
@@ -434,41 +316,48 @@ with abas[1]:
         df_treino = pd.read_csv(arquivo_treino)
         ok, faltantes = validar_base_treino(df_treino)
         if not ok:
-            st.error(f"A base de treino está sem as colunas: {', '.join(faltantes)}")
+            st.error(f"A base histórica está sem as colunas: {', '.join(faltantes)}")
         else:
             st.session_state.df_treino = df_treino
-            st.success("Base de treino carregada com sucesso.")
-            st.dataframe(df_treino.head(20), use_container_width=True)
+            st.success("Base histórica de treino carregada com sucesso.")
+            st.dataframe(df_treino.head(30), use_container_width=True, hide_index=True)
 
     if arquivo_demandas is not None:
         df_demandas = pd.read_csv(arquivo_demandas)
         ok, faltantes = validar_base_demandas(df_demandas)
         if not ok:
-            st.error(f"A base de demandas atuais está sem as colunas: {', '.join(faltantes)}")
+            st.error(f"A base de pedidos atuais está sem as colunas: {', '.join(faltantes)}")
         else:
             st.session_state.df_demandas = df_demandas
-            st.success("Base de demandas atuais carregada com sucesso.")
-            st.dataframe(df_demandas, use_container_width=True)
+            st.success("Base de pedidos atuais carregada com sucesso.")
+            st.dataframe(df_demandas, use_container_width=True, hide_index=True)
 
-    st.info(
-        "Depois de carregar as duas bases, vá para a aba '3. Treinamento' e clique no botão para treinar o modelo."
-    )
+    st.info("Depois de carregar as duas bases, vá para a aba '3. Treinamento'.")
 
 with abas[2]:
-    st.subheader("Treinamento do modelo supervisionado")
+    st.subheader("Treinamento do modelo")
 
     if st.session_state.df_treino is None:
-        st.warning("Carregue primeiro a base de treino na aba '2. Carregar dados'.")
+        st.warning("Carregue primeiro a base histórica de treino.")
     else:
         df_treino = st.session_state.df_treino
 
-        st.write("Resumo da base de treino carregada")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Registros", len(df_treino))
-        c2.metric("Pedidos aprovados no histórico", int(df_treino["aprovado_historico"].sum()))
-        c3.metric("Taxa histórica de aprovação", f"{df_treino['aprovado_historico'].mean():.1%}")
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Registros históricos", len(df_treino))
+        col_b.metric("Pedidos aprovados no histórico", int(df_treino["aprovado_historico"].sum()))
+        col_c.metric("Taxa histórica de aprovação", f"{df_treino['aprovado_historico'].mean():.1%}")
 
-        if st.button("Treinar modelo com a base histórica carregada", type="primary"):
+        st.write("Aprovação histórica por fonte/cargo")
+        resumo_fonte = (
+            df_treino.groupby("fonte_do_pedido")["aprovado_historico"]
+            .agg(["count", "sum", "mean"])
+            .reset_index()
+            .rename(columns={"count": "pedidos_historicos", "sum": "aprovados_historicos", "mean": "taxa_aprovacao_historica"})
+            .sort_values("taxa_aprovacao_historica", ascending=False)
+        )
+        st.dataframe(resumo_fonte, use_container_width=True, hide_index=True)
+
+        if st.button("Treinar IA com a base histórica enviesada", type="primary"):
             model = treinar_modelo(df_treino, algoritmo)
             st.session_state.model = model
 
@@ -490,10 +379,10 @@ with abas[2]:
 
             m1, m2 = st.columns(2)
             m1.metric("Acurácia em teste", f"{acc:.1%}")
-            m2.metric("Algoritmo utilizado", algoritmo)
+            m2.metric("Algoritmo", algoritmo)
 
             st.warning(
-                "Acurácia técnica não significa boa governança. O modelo pode estar apenas reproduzindo o viés histórico da organização."
+                "Acurácia alta pode apenas indicar que a IA aprendeu bem o padrão enviesado do histórico."
             )
 
             st.write("Matriz de confusão")
@@ -508,8 +397,8 @@ with abas[2]:
 
             imp = obter_importancias(model)
             if not imp.empty:
-                st.write("Variáveis mais influentes")
-                st.dataframe(imp, use_container_width=True)
+                st.write("Variáveis mais influentes no modelo")
+                st.dataframe(imp, use_container_width=True, hide_index=True)
 
                 fig, ax = plt.subplots()
                 ax.barh(imp["variavel"], imp["importancia"])
@@ -522,32 +411,35 @@ with abas[3]:
     st.subheader("Decisão explícita da IA: APROVAR ou REJEITAR pedidos")
 
     if st.session_state.model is None:
-        st.warning("Treine o modelo na aba '3. Treinamento'.")
+        st.warning("Treine primeiro o modelo na aba '3. Treinamento'.")
     elif st.session_state.df_demandas is None:
-        st.warning("Carregue a base de demandas atuais na aba '2. Carregar dados'.")
+        st.warning("Carregue primeiro a base de pedidos atuais.")
     else:
         resultado = aplicar_modelo(st.session_state.model, st.session_state.df_demandas)
         st.session_state.resultado = resultado
 
         total_aprovados = int((resultado["decisao_da_ia"] == "APROVAR pedido").sum())
         total_rejeitados = int((resultado["decisao_da_ia"] == "REJEITAR pedido").sum())
-        total_divergencias = int((resultado["alerta_governanca"] == "Divergência relevante").sum())
+        divergencias = int((resultado["alerta_governanca"] == "Divergência relevante").sum())
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Pedidos aprovados pela IA", total_aprovados)
-        m2.metric("Pedidos rejeitados pela IA", total_rejeitados)
-        m3.metric("Sinais de possível viés", total_divergencias)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pedidos aprovados pela IA", total_aprovados)
+        c2.metric("Pedidos rejeitados pela IA", total_rejeitados)
+        c3.metric("Divergências relevantes", divergencias)
 
         st.markdown(
             """
-            Abaixo está o ponto central da atividade. Os alunos devem observar as decisões da IA e questionar:
-            **a IA aprovou pedidos menos críticos? A IA rejeitou pedidos críticos? Alguma área foi favorecida ou prejudicada?**
+            Os alunos devem observar se a decisão da IA faz sentido. A referência de negócio considera principalmente:
+            **impacto, urgência, risco, alinhamento estratégico, usuários afetados e custo**.
+
+            O viés esperado é a IA favorecer o **cargo/fonte do pedido**.
             """
         )
 
         colunas = [
-            "id_demanda",
-            "demanda",
+            "id_pedido",
+            "pedido",
+            "fonte_do_pedido",
             "area_solicitante",
             "impacto_negocio",
             "urgencia",
@@ -557,79 +449,72 @@ with abas[3]:
             "usuarios_afetados",
             "probabilidade_aprovacao_ia",
             "decisao_da_ia",
+            "escore_referencia_negocio",
+            "decisao_referencia_negocio",
+            "alerta_governanca",
+            "tipo_de_alerta",
         ]
-
-        if mostrar_referencia:
-            colunas += [
-                "escore_referencia_governanca",
-                "decisao_referencia_governanca",
-                "alerta_governanca",
-            ]
 
         st.dataframe(resultado[colunas], use_container_width=True, hide_index=True)
 
         st.subheader("Leitura executiva das decisões")
         for _, row in resultado.iterrows():
-            texto = (
-                f"**{row['id_demanda']} — {row['demanda']}**  \n"
-                f"Área: {row['area_solicitante']} | Impacto: {row['impacto_negocio']} | "
-                f"Urgência: {row['urgencia']} | Risco: {row['risco_operacional']} | "
-                f"Alinhamento: {row['alinhamento_estrategico']} | "
-                f"Probabilidade de aprovação pela IA: {row['probabilidade_aprovacao_ia']:.0%}"
+            detalhes = (
+                f"**{row['id_pedido']} — {row['pedido']}**  \n"
+                f"Fonte/cargo: **{row['fonte_do_pedido']}** | Área: {row['area_solicitante']}  \n"
+                f"Impacto: {row['impacto_negocio']} | Urgência: {row['urgencia']} | "
+                f"Risco: {row['risco_operacional']} | Alinhamento: {row['alinhamento_estrategico']}  \n"
+                f"Probabilidade de aprovação pela IA: {row['probabilidade_aprovacao_ia']:.0%}  \n"
+                f"Referência de negócio: **{row['decisao_referencia_negocio']}**"
             )
 
             if row["decisao_da_ia"] == "APROVAR pedido":
-                st.success(f"✅ IA recomenda **APROVAR pedido**\n\n{texto}")
+                st.success(f"✅ IA recomenda **APROVAR pedido**\n\n{detalhes}")
             else:
-                st.error(f"⛔ IA recomenda **REJEITAR pedido**\n\n{texto}")
+                st.error(f"⛔ IA recomenda **REJEITAR pedido**\n\n{detalhes}")
 
         st.download_button(
             "Baixar decisões da IA em CSV",
             data=resultado.to_csv(index=False).encode("utf-8"),
-            file_name="decisoes_ia_aprovar_rejeitar.csv",
+            file_name="decisoes_ia_vies_cargo.csv",
             mime="text/csv",
         )
 
 with abas[4]:
-    st.subheader("Análise do viés")
+    st.subheader("Evidências do viés")
 
     if st.session_state.resultado is None:
-        st.warning("Gere primeiro as decisões da IA na aba '4. Decisão da IA'.")
+        st.warning("Gere primeiro as decisões da IA.")
     else:
         resultado = st.session_state.resultado
 
-        resumo_area = (
-            resultado.assign(aprovada_ia=(resultado["decisao_da_ia"] == "APROVAR pedido").astype(int))
-            .groupby("area_solicitante")
+        st.markdown("### Aprovação pela IA por fonte/cargo do pedido")
+        resumo_fonte = (
+            resultado.assign(aprovado_ia=(resultado["decisao_da_ia"] == "APROVAR pedido").astype(int))
+            .groupby("fonte_do_pedido")
             .agg(
-                demandas=("id_demanda", "count"),
-                pedidos_aprovados_pela_ia=("aprovada_ia", "sum"),
-                taxa_aprovacao_ia=("aprovada_ia", "mean"),
-                media_probabilidade_aprovacao_ia=("probabilidade_aprovacao_ia", "mean"),
-                media_escore_governanca=("escore_referencia_governanca", "mean"),
+                pedidos=("id_pedido", "count"),
+                aprovados_pela_ia=("aprovado_ia", "sum"),
+                taxa_aprovacao_ia=("aprovado_ia", "mean"),
+                media_probabilidade_aprovacao=("probabilidade_aprovacao_ia", "mean"),
+                media_escore_negocio=("escore_referencia_negocio", "mean"),
             )
             .reset_index()
             .sort_values("taxa_aprovacao_ia", ascending=False)
         )
-
-        st.write("Taxa de aprovação por área solicitante")
-        st.dataframe(resumo_area, use_container_width=True, hide_index=True)
+        st.dataframe(resumo_fonte, use_container_width=True, hide_index=True)
 
         fig, ax = plt.subplots()
-        ax.bar(resumo_area["area_solicitante"], resumo_area["taxa_aprovacao_ia"])
+        ax.bar(resumo_fonte["fonte_do_pedido"], resumo_fonte["taxa_aprovacao_ia"])
         ax.set_ylabel("Taxa de aprovação pela IA")
-        ax.set_xlabel("Área solicitante")
+        ax.set_xlabel("Fonte/cargo do pedido")
         ax.tick_params(axis="x", rotation=70)
         st.pyplot(fig)
 
         st.markdown("### Pedidos críticos rejeitados pela IA")
         criticos_rejeitados = resultado[
             (resultado["decisao_da_ia"] == "REJEITAR pedido")
-            & (
-                (resultado["impacto_negocio"] == "Alto")
-                | (resultado["risco_operacional"] == "Alto")
-                | (resultado["alinhamento_estrategico"] == "Alto")
-            )
+            & (resultado["decisao_referencia_negocio"] == "APROVAR pedido")
         ]
 
         if criticos_rejeitados.empty:
@@ -637,18 +522,16 @@ with abas[4]:
         else:
             st.dataframe(criticos_rejeitados, use_container_width=True, hide_index=True)
 
-        st.markdown("### Pedidos menos críticos aprovados pela IA")
-        menos_criticos_aprovados = resultado[
+        st.markdown("### Pedidos fracos aprovados pela IA")
+        fracos_aprovados = resultado[
             (resultado["decisao_da_ia"] == "APROVAR pedido")
-            & (resultado["impacto_negocio"].isin(["Baixo", "Médio"]))
-            & (resultado["risco_operacional"].isin(["Baixo", "Médio"]))
-            & (resultado["alinhamento_estrategico"].isin(["Baixo", "Médio"]))
+            & (resultado["decisao_referencia_negocio"] == "REJEITAR pedido")
         ]
 
-        if menos_criticos_aprovados.empty:
-            st.info("Nenhum pedido menos crítico foi aprovado pela IA neste conjunto.")
+        if fracos_aprovados.empty:
+            st.info("Nenhum pedido fraco foi aprovado pela IA neste conjunto.")
         else:
-            st.dataframe(menos_criticos_aprovados, use_container_width=True, hide_index=True)
+            st.dataframe(fracos_aprovados, use_container_width=True, hide_index=True)
 
 with abas[5]:
     st.subheader("Diagnóstico de governança")
@@ -657,13 +540,13 @@ with abas[5]:
         """
         ### Perguntas orientadoras
 
-        1. Quais pedidos a IA mandou **rejeitar**, apesar de terem alto impacto, alto risco ou alto alinhamento estratégico?
-        2. Quais pedidos a IA mandou **aprovar**, apesar de parecerem menos críticos?
-        3. Quais áreas parecem favorecidas pela IA?
-        4. Quais áreas parecem prejudicadas pela IA?
-        5. O problema é técnico, gerencial, ético, estratégico ou de governança?
-        6. Quem deveria aprovar o uso desse sistema antes da implantação?
-        7. Que controles deveriam existir antes, durante e depois da implantação?
+        1. A IA está considerando mais a **fonte/cargo do pedido** ou o **valor para o negócio**?
+        2. Quais pedidos críticos foram rejeitados por virem de fontes menos prestigiadas?
+        3. Quais pedidos fracos foram aprovados por virem de cargos superiores?
+        4. Que risco essa prática gera para a organização?
+        5. Que falha de governança permitiu que esse modelo fosse treinado com dados históricos enviesados?
+        6. Que critérios deveriam ser obrigatórios para aprovar ou rejeitar pedidos de TI?
+        7. Quem deveria validar o modelo antes da entrada em produção?
         """
     )
 
@@ -671,14 +554,14 @@ with abas[5]:
     st.dataframe(
         pd.DataFrame(
             [
-                ["Dados históricos enviesados", "Política de qualidade, curadoria, representatividade e linhagem de dados"],
-                ["IA rejeita pedidos críticos", "Validação independente com critérios mínimos de risco, impacto e alinhamento estratégico"],
-                ["IA aprova pedidos menos críticos", "Critérios formais de priorização e revisão por comitê"],
-                ["Modelo favorece áreas historicamente privilegiadas", "Avaliação de viés por área solicitante e auditoria periódica"],
-                ["Decisão automatizada sem revisão", "Human-in-the-loop para decisões de alto impacto"],
-                ["Falta de transparência", "Critérios mínimos de explicabilidade e comunicação às partes interessadas"],
-                ["Ausência de accountability", "Definição de dono do processo, dono dos dados, dono do modelo e comitê aprovador"],
-                ["Falta de monitoramento", "Indicadores periódicos de desempenho, equidade, risco e aderência à estratégia"],
+                ["Fonte/cargo domina a decisão", "Definir critérios formais de priorização por valor, risco, urgência e alinhamento estratégico"],
+                ["Dados históricos refletem cultura política", "Executar curadoria e avaliação de viés antes do treinamento"],
+                ["Pedidos críticos são rejeitados", "Implantar regra de exceção para alto impacto, alta urgência e alto risco"],
+                ["Pedidos fracos são aprovados por hierarquia", "Exigir justificativa de valor para demandas de cargos superiores"],
+                ["Modelo opaco para os usuários", "Exigir explicabilidade mínima e comunicação dos critérios decisórios"],
+                ["Ausência de responsabilização", "Definir dono do processo, dono dos dados, dono do modelo e comitê aprovador"],
+                ["Uso sem controle contínuo", "Monitorar taxa de aprovação por fonte, área, impacto, urgência e risco"],
+                ["Automação de decisão sensível", "Manter revisão humana para decisões de alto impacto"],
             ],
             columns=["Problema observado", "Prática de governança recomendada"],
         ),
@@ -690,15 +573,15 @@ with abas[5]:
     st.dataframe(
         pd.DataFrame(
             [
-                ["EDM01", "Framework de governança", "Definir como a organização governa o uso de IA em decisões de TI"],
-                ["EDM02", "Entrega de benefícios", "Verificar se a IA gera valor real e não apenas reproduz histórico"],
-                ["EDM03", "Otimização de riscos", "Tratar viés e erro decisório como riscos corporativos"],
-                ["EDM05", "Transparência", "Comunicar critérios, limitações e impactos das recomendações"],
-                ["APO12", "Gestão de riscos", "Identificar, avaliar e tratar riscos do modelo"],
+                ["EDM01", "Framework de governança", "Definir como a organização governa IA aplicada a decisões de TI"],
+                ["EDM02", "Entrega de benefícios", "Garantir que a priorização produza valor real para o negócio"],
+                ["EDM03", "Otimização de riscos", "Tratar viés cultural e erro decisório como riscos corporativos"],
+                ["EDM05", "Transparência", "Comunicar critérios e limitações da IA às partes interessadas"],
+                ["APO12", "Gestão de riscos", "Avaliar e tratar riscos de uso do modelo"],
                 ["APO14", "Gestão de dados", "Assegurar qualidade, representatividade e rastreabilidade dos dados"],
                 ["BAI03", "Construção de soluções", "Validar requisitos, testes e controles antes da implantação"],
-                ["MEA01", "Monitoramento de desempenho", "Acompanhar indicadores do modelo em operação"],
-                ["MEA03", "Conformidade", "Avaliar aderência a políticas, normas e requisitos regulatórios"],
+                ["MEA01", "Monitoramento", "Acompanhar indicadores do modelo em operação"],
+                ["MEA03", "Conformidade", "Verificar aderência às políticas internas"],
             ],
             columns=["Objetivo", "Foco", "Aplicação no caso"],
         ),
@@ -711,7 +594,7 @@ with abas[5]:
         st.download_button(
             "Baixar relatório preliminar em Markdown",
             data=relatorio.encode("utf-8"),
-            file_name="relatorio_preliminar_governanca.md",
+            file_name="relatorio_preliminar_vies_cargo.md",
             mime="text/markdown",
         )
 
@@ -722,11 +605,11 @@ with abas[6]:
         pd.DataFrame(
             [
                 ["1", "Decisões da IA", "Quais pedidos foram aprovados e quais foram rejeitados?"],
-                ["2", "Incoerências percebidas", "Quais aprovações ou rejeições não fazem sentido?"],
-                ["3", "Causa provável", "Qual viés ou falha de dados pode ter influenciado o modelo?"],
-                ["4", "Riscos", "Quais riscos estratégicos, operacionais, reputacionais, legais ou financeiros existem?"],
-                ["5", "Governança", "Que práticas, papéis, políticas e controles deveriam existir?"],
-                ["6", "Modelo proposto", "Como a organização deveria aprovar, monitorar e auditar sistemas de IA?"],
+                ["2", "Evidência do viés", "A fonte/cargo do pedido influenciou mais do que urgência e impacto?"],
+                ["3", "Decisões erradas", "Quais pedidos críticos foram rejeitados e quais pedidos fracos foram aprovados?"],
+                ["4", "Causa provável", "Que padrão cultural/hierárquico contaminou os dados históricos?"],
+                ["5", "Riscos", "Quais riscos estratégicos, operacionais, reputacionais e financeiros existem?"],
+                ["6", "Governança", "Que práticas, papéis, políticas e controles deveriam existir?"],
             ],
             columns=["Slide", "Tema", "Pergunta-chave"],
         ),
@@ -735,5 +618,5 @@ with abas[6]:
     )
 
     st.success(
-        "Mensagem central: a IA não apenas automatiza decisões; ela pode institucionalizar padrões históricos inadequados quando a governança não atua."
+        "Mensagem central: a IA pode automatizar a cultura organizacional errada quando os dados históricos refletem poder, hierarquia e preferência política em vez de valor para o negócio."
     )
