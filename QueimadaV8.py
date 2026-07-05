@@ -754,7 +754,7 @@ with tab3:
     with st.expander("Parâmetros avançados"):
         random_state = st.number_input("Semente aleatória", min_value=0, max_value=9999, value=42, step=1)
         max_depth_tree = st.slider("Profundidade máxima da Árvore de Decisão", 2, 15, 6)
-        max_depth_forest = st.slider("Profundidade máxima da Random Forest", 3, 25, 12)
+        max_depth_forest = st.slider("Profundidade máxima da Random Forest", 3, 40, 18)
         n_estimators = st.slider("Número de árvores da Random Forest", 50, 300, 120, step=10)
 
     st.warning(
