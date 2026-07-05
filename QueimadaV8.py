@@ -471,16 +471,16 @@ st.title("🔥 Sistema de IA para Classificação do Risco de Queimadas")
 st.caption("Projeto didático com dados do INPE — focos de queimadas e risco de fogo no Brasil")
 
 with st.sidebar:
-    st.markdown("### Base de dados")
+    st.markdown("###Base de dados")
     uploaded_file = st.file_uploader(
-        "Carregar outro CSV ou ZIP, se desejar",
-        type=["csv", "zip"],
+        "Carregar CSV",
+        type=["csv"],
         help=(
-            "O sistema aceita CSV direto ou ZIP contendo um ou mais CSVs. "
+            "O sistema aceita CSV direto"
             "Para a feira, recomenda-se usar a base didática de até 200 MB."
         ),
     )
-    st.caption("O ZIP deve conter arquivo(s) CSV. O sistema prioriza automaticamente a base didática de até 200 MB.")
+    st.caption("Carregue uma base de dados .CSV para fins de treinamento")
 
 try:
     loaded_source = None
