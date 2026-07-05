@@ -720,7 +720,7 @@ with tab3:
             if available_training_records <= 300_000:
                 default_records = available_training_records
             else:
-                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.60)))
+                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.55)))
             step_records = 50_000 if max_records >= 500_000 else 10_000 if max_records >= 100_000 else 1_000
             min_records = min(1_000, max_records)
             sample_size = st.slider(
