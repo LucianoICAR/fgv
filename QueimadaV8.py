@@ -98,7 +98,7 @@ def read_csv_from_zip(file_or_path) -> pd.DataFrame:
                 frames.append(read_csv_optimized(csv_file))
 
     if not frames:
-        raise ValueError("Não foi possível ler arquivos CSV dentro do ZIP.")
+        raise ValueError("Carregue uma base para fins de aprendizado e exploração dos dados.")
     if len(frames) == 1:
         return frames[0]
     return pd.concat(frames, ignore_index=True)
