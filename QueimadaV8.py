@@ -12,17 +12,10 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 
 st.set_page_config(
-    page_title="IA para Risco de Queimadas - INPE",
+    page_title="Feira de Ciências CMR - IA para Risco de Queimadas",
     page_icon="🔥",
     layout="wide",
 )
-
-LOCAL_DATA_CANDIDATES = [
-    "base_queimadas_INPE_2020_2025_didatica_limpa_ate_200MB.csv",
-    "base_queimadas_INPE_2020_2025_didatica_limpa_ate_200MB.zip",
-    "base_queimadas_INPE_2020_2025_didatica_limpa.csv",
-    "base_queimadas_INPE_2020_2025_didatica_limpa.zip",
-]
 RISK_ORDER = ["Baixo", "Médio", "Alto"]
 RISK_COLOR_MAP = {"Baixo": "green", "Médio": "orange", "Alto": "red"}
 MONTH_NAMES = {
