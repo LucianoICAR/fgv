@@ -583,7 +583,7 @@ with tab2:
 
         st.info(
             "Esta aba apresenta análise exploratória e estatística descritiva dos dados. "
-            "Ela não executa aprendizado. O treinamento de IA supervisionada ocorre na aba "Treinar a IA""
+            "Ela não executa aprendizado. O treinamento de IA supervisionada ocorre na aba "Treinar a IA.""
         )
 
         st.subheader("Risco de queimadas por mês")
