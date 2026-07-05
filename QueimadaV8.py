@@ -556,6 +556,12 @@ with tab1:
         "das condições informadas. Ele não afirma, sozinho, que uma queimada futura ocorrerá ou não."
     )
 
+    st.subheader("100 primeiros registros extraídos do CSV")
+st.caption(
+    "A tabela abaixo mostra uma amostra inicial da base já carregada e padronizada pelo sistema."
+)
+st.dataframe(df.head(100), use_container_width=True, hide_index=True)
+
     with st.expander("Como o rótulo foi criado"):
         st.write(
             "O atributo `risco_fogo`, que varia de 0 a 1, foi transformado em três classes para "
