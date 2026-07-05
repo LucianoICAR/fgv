@@ -521,7 +521,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "1. Sobre o projeto",
     "2. Explorar os dados",
     "3. Treinar a IA",
-    "4. Simular risco",
+    "4. Simular risco de queimada",
 ])
 
 with tab1:
@@ -583,7 +583,7 @@ with tab2:
 
         st.info(
             "Esta aba apresenta análise exploratória e estatística descritiva dos dados. "
-            "Ela não executa aprendizado não supervisionado; o treinamento de IA supervisionada ocorre na aba 3."
+            "Ela não executa aprendizado. O treinamento de IA supervisionada ocorre na aba "Treinar a IA"
         )
 
         st.subheader("Risco de queimadas por mês")
@@ -714,7 +714,7 @@ with tab3:
             if available_training_records <= 300_000:
                 default_records = available_training_records
             else:
-                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.50)))
+                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.70)))
             step_records = 50_000 if max_records >= 500_000 else 10_000 if max_records >= 100_000 else 1_000
             min_records = min(1_000, max_records)
             sample_size = st.slider(
@@ -879,7 +879,5 @@ with tab4:
 - O que acontece com o risco quando aumentamos os dias sem chuva?
 - A precipitação no dia sempre reduz o risco? Por quê?
 - O risco muda entre biomas diferentes?
-- Por que a IA pode errar mesmo usando muitos dados?
-- Por que é importante avaliar especialmente a classe **Alto**?
                 """
             )
