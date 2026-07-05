@@ -496,11 +496,11 @@ try:
             st.error(
                 "A base não foi encontrada. Coloque uma destas bases na mesma pasta do app.py: "
                 + ", ".join(LOCAL_DATA_CANDIDATES)
-                + ". Você também pode carregar um CSV/ZIP pela barra lateral."
+                + ". Você deve carregar um CSV pela barra lateral."
             )
             st.stop()
 except Exception as exc:
-    st.error(f"Não foi possível carregar a base: {exc}")
+    st.error(f"Carregue uma base de dados: {exc}")
     st.stop()
 
 st.sidebar.caption(f"Base carregada: {loaded_source}")
