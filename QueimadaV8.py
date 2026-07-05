@@ -433,7 +433,7 @@ def train_model(
         clf = RandomForestClassifier(
             n_estimators=n_estimators,
             max_depth=max_depth_forest,
-            min_samples_leaf=25,
+            min_samples_leaf=5,
             class_weight="balanced_subsample",
             n_jobs=-1,
             random_state=random_state,
