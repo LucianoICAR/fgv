@@ -444,29 +444,37 @@ def train_model(
 
     y_pred = pipeline.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
+
+    # Métricas focadas na classe Alto, que é a classe mais crítica para o projeto.
     recall_alto = recall_score(
-    y_test,
-    y_pred,
-    labels=["Alto"],
-    average="macro",
-    zero_division=0
-        )
-
+        y_test,
+        y_pred,
+        labels=["Alto"],
+        average="macro",
+        zero_division=0,
+    )
     precision_alto = precision_score(
-    y_test,
-    y_pred,
-    labels=["Alto"],
-    average="macro",
-    zero_division=0
-        )
-
+        y_test,
+        y_pred,
+        labels=["Alto"],
+        average="macro",
+        zero_division=0,
+    )
     f1_alto = f1_score(
-    y_test,
-    y_pred,
-    labels=["Alto"],
-    average="macro",
-    zero_division=0
-        )
+        y_test,
+        y_pred,
+        labels=["Alto"],
+        average="macro",
+        zero_division=0,
+    )
+
+    cm_labels = [label for label in RISK_ORDER if label in sorted(set(y_test) | set(y_pred))]
+    cm = confusion_matrix(y_test, y_pred, labels=cm_labels)
+    confusion_matrix_df = pd.DataFrame(
+        cm,
+        index=[f"Real {label}" for label in cm_labels],
+        columns=[f"Previsto {label}" for label in cm_labels],
+    )
 
     metadata = {
         "features": features,
@@ -479,6 +487,10 @@ def train_model(
         "train_size": len(X_train),
         "test_size": len(X_test),
         "accuracy": accuracy,
+        "recall_alto": recall_alto,
+        "precision_alto": precision_alto,
+        "f1_alto": f1_alto,
+        "confusion_matrix": confusion_matrix_df,
         "train_percent": TRAIN_SIZE,
         "test_percent": TEST_SIZE,
     }
@@ -805,15 +817,30 @@ with tab3:
                     st.session_state["metadata_modelo"] = metadata
                     st.success("Modelo treinado com sucesso. Agora use a aba **Simular risco**.")
                     a1, a2, a3, a4 = st.columns(4)
-                    a1.metric("Acurácia no teste", f"{accuracy:.1%}")
-                    a2.metric("Registros do experimento", f"{metadata['sample_size_used']:,}".replace(",", "."))
-                    a3.metric("Registros de treino", f"{metadata['train_size']:,}".replace(",", "."))
-                    a4.metric("Registros de teste", f"{metadata['test_size']:,}".replace(",", "."))
+                    a1.metric("Acurácia geral", f"{accuracy:.1%}")
+                    a2.metric("Recall da classe Alto", f"{metadata['recall_alto']:.1%}")
+                    a3.metric("Precisão da classe Alto", f"{metadata['precision_alto']:.1%}")
+                    a4.metric("F1-score da classe Alto", f"{metadata['f1_alto']:.1%}")
+
+                    r1, r2, r3 = st.columns(3)
+                    r1.metric("Registros do experimento", f"{metadata['sample_size_used']:,}".replace(",", "."))
+                    r2.metric("Registros de treino", f"{metadata['train_size']:,}".replace(",", "."))
+                    r3.metric("Registros de teste", f"{metadata['test_size']:,}".replace(",", "."))
+
                     st.caption(
-                        "A acurácia é calculada nos 20% da base separados apenas para teste. "
-                        "Os outros 80% são usados para treinamento. A divisão é estratificada para preservar "
-                        "a proporção das classes de risco."
+                        "A acurácia mede o acerto geral. O recall da classe Alto mede quantos casos "
+                        "realmente classificados como Alto foram encontrados pelo modelo. Para risco de "
+                        "queimadas, esse indicador é especialmente importante porque reduz a chance de "
+                        "deixar passar situações críticas. A divisão treino/teste é estratificada para "
+                        "preservar a proporção das classes Baixo, Médio e Alto."
                     )
+
+                    with st.expander("Ver matriz de confusão do teste"):
+                        st.write(
+                            "Na matriz de confusão, as linhas representam a classe real e as colunas "
+                            "representam a classe prevista pelo modelo."
+                        )
+                        st.dataframe(metadata["confusion_matrix"], use_container_width=True)
                 except Exception as exc:
                     st.error(f"Falha no treinamento: {exc}")
 
