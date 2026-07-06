@@ -727,7 +727,7 @@ with tab2:
         st.divider()
 
         st.subheader("Mapa dos focos filtrados")
-        map_size = st.slider("Quantidade máxima de pontos no mapa", 500, 10000, 3000, step=500)
+        map_size = st.slider("Quantidade máxima de pontos no mapa", 500, 1000000, 10000, step=1000)
         map_df = filtered_df.sample(min(map_size, len(filtered_df)), random_state=42)
         fig_map = px.scatter_mapbox(
             map_df,
