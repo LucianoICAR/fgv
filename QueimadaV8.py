@@ -5,7 +5,7 @@ import plotly.express as px
 import streamlit as st
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -444,6 +444,29 @@ def train_model(
 
     y_pred = pipeline.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
+    recall_alto = recall_score(
+    y_test,
+    y_pred,
+    labels=["Alto"],
+    average="macro",
+    zero_division=0
+        )
+
+    precision_alto = precision_score(
+    y_test,
+    y_pred,
+    labels=["Alto"],
+    average="macro",
+    zero_division=0
+        )
+
+    f1_alto = f1_score(
+    y_test,
+    y_pred,
+    labels=["Alto"],
+    average="macro",
+    zero_division=0
+        )
 
     metadata = {
         "features": features,
