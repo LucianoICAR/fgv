@@ -16,6 +16,12 @@ st.set_page_config(
     page_icon="🔥",
     layout="wide",
 )
+LOCAL_DATA_CANDIDATES = [
+    "base_queimadas_INPE_2020_2025_didatica_limpa_ate_200MB.csv",
+    "base_queimadas_INPE_2020_2025_didatica_limpa_ate_200MB.zip",
+    "base_queimadas_INPE_2020_2025_didatica_limpa.csv",
+    "base_queimadas_INPE_2020_2025_didatica_limpa.zip",
+]
 RISK_ORDER = ["Baixo", "Médio", "Alto"]
 RISK_COLOR_MAP = {"Baixo": "green", "Médio": "orange", "Alto": "red"}
 MONTH_NAMES = {
@@ -363,6 +369,35 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
+def predict_with_high_risk_threshold(model, X, threshold_alto: float = 0.40):
+    """
+    Aplica uma regra de alerta para a classe Alto.
+
+    Regra padrão do modelo: escolhe a classe com maior probabilidade.
+    Regra ajustada: se a probabilidade de Alto atingir o limiar definido,
+    a previsão final passa a ser Alto. Isso tende a aumentar o recall de Alto,
+    ainda que possa reduzir a precisão.
+    """
+    default_predictions = model.predict(X)
+
+    if not hasattr(model, "predict_proba"):
+        return default_predictions
+
+    probabilities = model.predict_proba(X)
+    classes = list(model.classes_)
+
+    if "Alto" not in classes:
+        return default_predictions
+
+    alto_index = classes.index("Alto")
+    alto_probabilities = probabilities[:, alto_index]
+
+    adjusted_predictions = default_predictions.copy()
+    adjusted_predictions[alto_probabilities >= threshold_alto] = "Alto"
+
+    return adjusted_predictions
+
+
 def train_model(
     df_model: pd.DataFrame,
     model_name: str,
@@ -371,6 +406,7 @@ def train_model(
     max_depth_tree: int,
     max_depth_forest: int,
     n_estimators: int,
+    threshold_alto: float,
 ):
     target = TRAINING_TARGET
     numeric_features = TRAINING_NUMERIC_FEATURES
@@ -442,7 +478,11 @@ def train_model(
     pipeline = Pipeline(steps=[("preprocessamento", preprocessor), ("modelo", clf)])
     pipeline.fit(X_train, y_train)
 
-    y_pred = pipeline.predict(X_test)
+    y_pred = predict_with_high_risk_threshold(
+        pipeline,
+        X_test,
+        threshold_alto=threshold_alto,
+    )
     accuracy = accuracy_score(y_test, y_pred)
 
     # Métricas focadas na classe Alto, que é a classe mais crítica para o projeto.
@@ -491,6 +531,7 @@ def train_model(
         "precision_alto": precision_alto,
         "f1_alto": f1_alto,
         "confusion_matrix": confusion_matrix_df,
+        "threshold_alto": threshold_alto,
         "train_percent": TRAIN_SIZE,
         "test_percent": TEST_SIZE,
     }
@@ -755,7 +796,7 @@ with tab3:
             if available_training_records <= 300_000:
                 default_records = available_training_records
             else:
-                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.50)))
+                default_records = min(available_training_records, max(300_000, int(available_training_records * 0.55)))
             step_records = 50_000 if max_records >= 500_000 else 10_000 if max_records >= 100_000 else 1_000
             min_records = min(1_000, max_records)
             sample_size = st.slider(
@@ -791,6 +832,17 @@ with tab3:
         max_depth_tree = st.slider("Profundidade máxima da Árvore de Decisão", 2, 15, 6)
         max_depth_forest = st.slider("Profundidade máxima da Random Forest", 3, 40, 18)
         n_estimators = st.slider("Número de árvores da Random Forest", 50, 300, 120, step=10)
+        threshold_alto = st.slider(
+            "Limiar de alerta para classe Alto",
+            min_value=0.20,
+            max_value=0.70,
+            value=0.40,
+            step=0.05,
+            help=(
+                "Quanto menor o limiar, mais sensível o sistema fica para classificar Alto. "
+                "Isso tende a aumentar o recall da classe Alto, mas pode reduzir a precisão."
+            ),
+        )
 
     st.warning(
         "Para evitar vazamento de informação, o modelo **não usa** `risco_fogo` como entrada. "
@@ -812,6 +864,7 @@ with tab3:
                         max_depth_tree=max_depth_tree,
                         max_depth_forest=max_depth_forest,
                         n_estimators=n_estimators,
+                        threshold_alto=threshold_alto,
                     )
                     st.session_state["modelo_queimadas"] = pipeline
                     st.session_state["metadata_modelo"] = metadata
@@ -821,6 +874,11 @@ with tab3:
                     a2.metric("Recall da classe Alto", f"{metadata['recall_alto']:.1%}")
                     a3.metric("Precisão da classe Alto", f"{metadata['precision_alto']:.1%}")
                     a4.metric("F1-score da classe Alto", f"{metadata['f1_alto']:.1%}")
+                    st.caption(
+                        f"Regra de alerta usada: classificar como **Alto** sempre que "
+                        f"a probabilidade da classe Alto for maior ou igual a "
+                        f"{metadata['threshold_alto']:.0%}."
+                    )
 
                     r1, r2, r3 = st.columns(3)
                     r1.metric("Registros do experimento", f"{metadata['sample_size_used']:,}".replace(",", "."))
@@ -890,8 +948,17 @@ with tab4:
                 "precipitacao": precipitacao,
             }
             input_df = pd.DataFrame([input_row])[features]
-            prediction = model.predict(input_df)[0]
+            threshold_alto = metadata.get("threshold_alto", 0.40)
+            prediction = predict_with_high_risk_threshold(
+                model,
+                input_df,
+                threshold_alto=threshold_alto,
+            )[0]
             st.success(f"Risco estimado: **{prediction}**")
+            st.caption(
+                f"Regra de alerta aplicada: se a probabilidade de Alto for maior ou igual a "
+                f"{threshold_alto:.0%}, o sistema classifica como Alto."
+            )
 
             if hasattr(model, "predict_proba"):
                 probabilities = model.predict_proba(input_df)[0]
@@ -910,6 +977,10 @@ with tab4:
                 )
                 fig_prob.update_yaxes(tickformat=".0%")
                 st.plotly_chart(fig_prob, use_container_width=True)
+                st.caption(
+                    "No modo de alerta, a decisão final pode ser Alto mesmo quando Alto não é a maior "
+                    "probabilidade, desde que ultrapasse o limiar definido no treinamento."
+                )
 
             explanation_parts = []
             if dias_sem_chuva >= 15:
