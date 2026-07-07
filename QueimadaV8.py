@@ -845,8 +845,7 @@ with tab3:
 
     st.warning(
         "Para evitar vazamento de informação, o modelo **não usa** `risco_fogo` como entrada. "
-        "Ele usa `classe_risco_fogo` apenas como rótulo a ser aprendido. O campo `frp` também fica fora "
-        "do modelo inicial, porque mede a potência radiativa do fogo já detectado."
+        "Ele usa `classe_risco_fogo` apenas como rótulo a ser aprendido."
     )
 
     if available_training_records < 1000:
@@ -904,7 +903,7 @@ with tab3:
 with tab4:
     st.header("Simulador de risco")
     st.write(
-        "Informe uma situação hipotética. O modelo treinado estimará a classe de risco com base nos padrões aprendidos."
+        "Informe uma localização, que o modelo treinado estimará a classe de risco com base nos padrões aprendidos."
     )
 
     if "modelo_queimadas" not in st.session_state:
