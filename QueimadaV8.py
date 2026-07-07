@@ -12,7 +12,8 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 
 st.set_page_config(
-    page_title="Feira de Ciências CMR - IA para Risco de Queimadas",
+    page_title="Feira de Ciências CMR - IA contra o Fogo: panorama dos riscos de queimadas
+nos biomas brasileiros",
     page_icon="🔥",
     layout="wide",
 )
