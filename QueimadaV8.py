@@ -543,11 +543,11 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
-st.title("🔥 Sistema de IA para Classificação do Risco de Queimadas")
-st.caption("Projeto didático com dados do INPE — focos de queimadas e risco de fogo no Brasil")
+st.title("🔥 Mapa Inteligente do Fogo: IA na análise dos riscos de queimadas no Brasil 🔥")
+st.caption("Focos de queimadas e risco de fogo no Brasil")
 
 with st.sidebar:
-    st.markdown("###Base de dados")
+    st.markdown("Base de dados")
     uploaded_file = st.file_uploader(
         "Carregar CSV",
         type=["csv"],
@@ -603,7 +603,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.header("Objetivo científico")
     st.write(
-        "Este sistema usa dados de focos de queimadas e incêndios florestais do INPE para "
+        "Este sistema usa dados de focos de queimadas e incêndios florestais do Programa Quimadas do INPE para "
         "classificar o risco de fogo em **baixo**, **médio** ou **alto**. A IA aprende padrões "
         "históricos a partir de variáveis naturais, geográficas e antrópicas."
     )
