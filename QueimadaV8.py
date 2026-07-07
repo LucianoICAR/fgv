@@ -543,8 +543,8 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
-st.title("🔥 Mapa Inteligente do Fogo: IA na análise dos riscos de queimadas no Brasil 🔥")
-st.caption("Focos de queimadas e risco de fogo no Brasil")
+st.title("🔥 Feira de Ciências CMR Mapa Inteligente do Fogo 🔥")
+st.caption("IA na análise dos riscos de queimadas no Brasil")
 
 with st.sidebar:
     st.markdown("Base de dados")
