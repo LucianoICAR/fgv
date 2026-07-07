@@ -543,7 +543,7 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
-st.title("🔥 Feira de Ciências CMR Mapa Inteligente do Fogo 🔥")
+st.title("🔥 Feira de Ciências CMR: Mapa Inteligente do Fogo 🔥")
 st.caption("IA na análise dos riscos de queimadas no Brasil")
 
 with st.sidebar:
@@ -570,9 +570,8 @@ try:
             df = load_data_from_path(local_data_file)
         else:
             st.error(
-                "A base não foi encontrada. Coloque uma destas bases na mesma pasta do app.py: "
-                + ", ".join(LOCAL_DATA_CANDIDATES)
-                + ". Você deve carregar um CSV pela barra lateral."
+                "Carregue ao lado uma base de dados válida: "
+                 + ". Você deve carregar um CSV pela barra lateral."
             )
             st.stop()
 except Exception as exc:
