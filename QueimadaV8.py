@@ -571,7 +571,7 @@ try:
         else:
             st.error(
                 "Carregue ao lado uma base de dados válida: "
-                 + ". Você deve carregar um CSV pela barra lateral."
+                 + "Você deve carregar um CSV pela barra lateral."
             )
             st.stop()
 except Exception as exc:
