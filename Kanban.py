@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import math
@@ -162,7 +161,7 @@ def mostrar_coluna(titulo, historias, wip=None):
 st.sidebar.header("⚙️ Configurações do Case")
 
 demandas = st.sidebar.slider("Quantidade total de Histórias", 5, 60, 12)
-dias_simulacao = st.sidebar.slider("Dias de simulação", 1, 30, 1)
+dias_simulacao = st.sidebar.slider("Dias de simulação", 0, 30, 0)
 meta_ciclo = st.sidebar.number_input("Meta de tempo de ciclo médio (dias)", min_value=1, max_value=30, value=3)
 
 st.sidebar.divider()
