@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import math
@@ -75,6 +76,15 @@ def simular_fluxo(qtd_demandas, dias, cap_analise, cap_dev, cap_teste, wip_anali
     teste = []
     concluido = []
 
+    historico_colunas = [
+        "Dia",
+        "Backlog",
+        "Análise",
+        "Desenvolvimento",
+        "Testes",
+        "Concluído",
+        "Movimentos do dia"
+    ]
     historico = []
 
     for dia in range(1, dias + 1):
@@ -132,7 +142,7 @@ def simular_fluxo(qtd_demandas, dias, cap_analise, cap_dev, cap_teste, wip_anali
         "Desenvolvimento": dev,
         "Testes": teste,
         "Concluído": concluido,
-        "Histórico": pd.DataFrame(historico)
+        "Histórico": pd.DataFrame(historico, columns=historico_colunas)
     }
 
 
@@ -330,7 +340,14 @@ with aba3:
 
     st.subheader("Evolução acumulada")
     df_hist = simulacao["Histórico"].copy()
-    st.line_chart(df_hist.set_index("Dia")[["Backlog", "Análise", "Desenvolvimento", "Testes", "Concluído"]])
+
+    if df_hist.empty:
+        st.info(
+            "A simulação está no Dia 0. Ainda não há histórico de evolução. "
+            "Aumente os dias de simulação para visualizar o gráfico acumulado."
+        )
+    else:
+        st.line_chart(df_hist.set_index("Dia")[["Backlog", "Análise", "Desenvolvimento", "Testes", "Concluído"]])
 
 # ---------------------------------------------------------
 # Aba 4
