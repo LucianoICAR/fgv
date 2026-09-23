@@ -26,7 +26,7 @@ else:
 
 # Remove colunas técnicas eventualmente presentes em uma base exportada por versões anteriores do app.
 # Essas colunas servem apenas à interface e não fazem parte dos dados do negócio.
-technical_cols = ["_categorias_problema", "_tem_problema_3Cs", "_status"]
+technical_cols = ["_categorias_problema", "_tem_problema_", "_status"]
 df = df.drop(columns=[c for c in technical_cols if c in df.columns], errors="ignore")
 
 # ---------- PASSO 1
@@ -87,10 +87,10 @@ def categorias_linha(row, idx):
 
 cats = [categorias_linha(df.iloc[i], i) for i in range(df.shape[0])]
 df["_categorias_problema"] = cats
-df["_tem_problema_3Cs"] = df["_categorias_problema"].str.len() > 0
+df["_tem_problema_"] = df["_categorias_problema"].str.len() > 0
 
 st.subheader("Resumo (contagem por tipo de problema)")
-if df["_tem_problema_3Cs"].any():
+if df["_tem_problema_"].any():
     all_cats = []
     for c in df["_categorias_problema"]:
         if c:
@@ -100,8 +100,8 @@ if df["_tem_problema_3Cs"].any():
 else:
     st.success("Nenhum problema de Completude/Consistência/Unicidade foi encontrado.")
 
-st.subheader("Linhas com problemas (3Cs)")
-st.dataframe(df[df["_tem_problema_3Cs"]], use_container_width=True)
+st.subheader("Linhas com problemas")
+st.dataframe(df[df["_tem_problema_"]], use_container_width=True)
 
 # ---------- OUTLIERS (IQR)
 st.divider()
@@ -257,14 +257,14 @@ st.divider()
 st.header("Gerar base limpa")
 
 st.markdown('''
-- 🔴 **Problema (3Cs)**  
+- 🔴 **Problema **  
 - 🟡 **Outlier (IQR)**  
 - 🟣 **Ambos**  
 - 🟢 **OK**
 ''')
 
-status = np.where(df["_tem_problema_3Cs"] & outlier_mask, "🟣 problema + outlier",
-         np.where(df["_tem_problema_3Cs"], "🔴 problema",
+status = np.where(df["_tem_problema_"] & outlier_mask, "🟣 problema + outlier",
+         np.where(df["_tem_problema_"], "🔴 problema",
          np.where(outlier_mask, "🟡 outlier", "🟢 ok")))
 df_prev = df.copy()
 df_prev["_status"] = status
@@ -280,7 +280,7 @@ st.subheader("Prévia com status (cores)")
 st.dataframe(df_prev.head(120).style.apply(highlight_row, axis=1), use_container_width=True)
 
 # 1) Remove problemas determinísticos de Completude, Consistência e Unicidade.
-base_sem_3cs = df.loc[~df["_tem_problema_3Cs"]].copy()
+base_sem_3cs = df.loc[~df["_tem_problema_"]].copy()
 removed_3cs = df.shape[0] - base_sem_3cs.shape[0]
 
 # 2) Remove outliers pelo IQR até estabilizar. Recalcular o IQR após a primeira
@@ -303,7 +303,7 @@ clean_df = clean_df.drop(
 removed_total = df.shape[0] - clean_df.shape[0]
 st.write(
     f"Registros originais: **{df.shape[0]}** | "
-    f"Removidos pelos 3Cs: **{removed_3cs}** | "
+    f"Removidos - problemas: **{removed_3cs}** | "
     f"Removidos pelo IQR: **{removed_iqr}** | "
     f"Restantes (limpos): **{clean_df.shape[0]}**"
 )
