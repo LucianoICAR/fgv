@@ -41,9 +41,9 @@ with st.expander("Tipos & nulos por coluna"):
     info_df = pd.DataFrame({"dtype": df.dtypes.astype(str), "n_nulos": df.isna().sum(), "%_nulos": (df.isna().mean()*100).round(2)})
     st.dataframe(info_df, use_container_width=True)
 
-# ---------- QUALIDADE: 3Cs
+# ---------- QUALIDADE:
 st.divider()
-st.header("Qualidade dos Dados (3Cs)")
+st.header("Qualidade dos Dados")
 
 current_year = pd.Timestamp.now().year
 probs = []
@@ -303,7 +303,7 @@ clean_df = clean_df.drop(
 removed_total = df.shape[0] - clean_df.shape[0]
 st.write(
     f"Registros originais: **{df.shape[0]}** | "
-    f"Removidos - problemas: **{removed_3cs}** | "
+    f"Removidos problemas: **{removed_3cs}** | "
     f"Removidos pelo IQR: **{removed_iqr}** | "
     f"Restantes (limpos): **{clean_df.shape[0]}**"
 )
