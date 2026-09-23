@@ -257,7 +257,7 @@ st.divider()
 st.header("Gerar base limpa")
 
 st.markdown('''
-- 🔴 **Problema **  
+- 🔴 **Problema**  
 - 🟡 **Outlier (IQR)**  
 - 🟣 **Ambos**  
 - 🟢 **OK**
