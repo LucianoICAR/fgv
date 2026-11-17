@@ -118,11 +118,15 @@ def simular_safra(clima: pd.DataFrame, pesos: Pesos, politica: str,
             irrigacao = ACOES_MM[int(np.argmax(Q[s]))]
         else:
             raise ValueError("Política desconhecida")
+        umidade_antes = umidade
         trans = transicao(umidade, irrigacao, dia, pesos)
         umidade = trans["umidade"]
         recompensas.append(trans["recompensa"])
         linha_dia.append({"Dia": int(dia.dia), "Irrigação (mm)": irrigacao,
                           "Chuva (mm)": float(dia.chuva_mm),
+                          "Previsão de chuva": "Sim" if int(dia.prev_chuva) else "Não",
+                          "Demanda hídrica": "Alta" if int(dia.demanda_alta) else "Normal",
+                          "Umidade inicial (mm)": umidade_antes,
                           "Umidade final (mm)": umidade, "Estresse": int(trans["estresse"]),
                           "Estresse grave": int(trans["critico"])})
     historico = pd.DataFrame(linha_dia)
@@ -134,7 +138,11 @@ def simular_safra(clima: pd.DataFrame, pesos: Pesos, politica: str,
               "agua_m3_ha": float(historico["Irrigação (mm)"].sum() * 10),
               "indice_cultura": float(indice), "dias_estresse": dias_estresse,
               "dias_criticos": dias_criticos, "pct_criticos": 100 * dias_criticos / len(clima),
-              "recompensa": float(np.sum(recompensas))}
+              "recompensa": float(np.sum(recompensas)),
+              "dias_0mm": int((historico["Irrigação (mm)"] == 0).sum()),
+              "dias_6mm": int((historico["Irrigação (mm)"] == 6).sum()),
+              "dias_8mm": int((historico["Irrigação (mm)"] == 8).sum()),
+              "dias_12mm": int((historico["Irrigação (mm)"] == 12).sum())}
     return resumo, historico
 
 
