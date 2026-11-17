@@ -27,6 +27,59 @@ st.caption(
     "Não estima produtividade agrícola real nem autoriza controle físico de irrigação."
 )
 
+st.markdown("### Antes de começar — como a irrigação funciona")
+st.markdown(
+    "**Talhão** é uma área delimitada da fazenda, utilizada como unidade de manejo. "
+    "O consumo é expresso por hectare (ha), para permitir a comparação entre estratégias. "
+    "**Atenção: 0 mm é a quantidade de água adicionada pela irrigação naquele dia; "
+    "não significa que o solo esteja sem água.** O solo pode já estar úmido ou receber chuva."
+)
+st.dataframe(pd.DataFrame([
+    {"Conceito": "Umidade do solo", "O que significa": "Água disponível no solo antes da decisão (estado observado)."},
+    {"Conceito": "Irrigação de 0 mm", "O que significa": "Não aplicar água adicional hoje; pode ser apropriado se houver água suficiente."},
+    {"Conceito": "Irrigação de 6 mm", "O que significa": "Aplicar uma lâmina moderada de água."},
+    {"Conceito": "Irrigação de 12 mm", "O que significa": "Aplicar uma lâmina mais intensa de água."},
+    {"Conceito": "Chuva", "O que significa": "A água da chuva pode aumentar a umidade mesmo quando a irrigação é 0 mm."},
+]), hide_index=True, use_container_width=True)
+with st.expander("📏 Como o calendário fixo chega a 7.200 m³/ha?", expanded=True):
+    st.markdown(
+        "A política tradicional **irriga 8 mm no dia 1, não irriga no dia 2, "
+        "irriga 8 mm no dia 3**, e assim sucessivamente. "
+        "Ela **não consulta a umidade nem a previsão de chuva** para decidir a lâmina de irrigação."
+    )
+    st.dataframe(pd.DataFrame([
+        {"Dia": 1, "Água adicionada": "8 mm", "Critério": "Dia programado"},
+        {"Dia": 2, "Água adicionada": "0 mm", "Critério": "Dia sem irrigação"},
+        {"Dia": 3, "Água adicionada": "8 mm", "Critério": "Dia programado"},
+        {"Dia": 4, "Água adicionada": "0 mm", "Critério": "Dia sem irrigação"},
+    ]), hide_index=True, use_container_width=True)
+    st.markdown(
+        "**180 dias ÷ 2 = 90 irrigações** · **90 × 8 mm = 720 mm na safra** · "
+        "**1 mm sobre 1 hectare = 10 m³/ha** · **720 × 10 = 7.200 m³/ha**. "
+        "Este é o volume aplicado por irrigação (a chuva não é somada ao consumo)."
+    )
+with st.expander("🤖 Como a IA decide entre 0, 6 e 12 mm?", expanded=True):
+    st.markdown(
+        "Antes de cada decisão, o agente observa **(1) a faixa de umidade do solo, "
+        "(2) a previsão de chuva e (3) se a demanda hídrica está alta ou normal**. "
+        "O Q-Learning usa a política aprendida para escolher uma das três ações."
+    )
+    st.dataframe(pd.DataFrame([
+        {"Situação ilustrativa": "Solo úmido, com previsão de chuva", "Ação que pode ser adequada": "0 mm", "Por quê?": "A água presente e a chuva podem ser suficientes."},
+        {"Situação ilustrativa": "Solo moderadamente seco, sem chuva", "Ação que pode ser adequada": "6 mm", "Por quê?": "Repõe água com consumo moderado."},
+        {"Situação ilustrativa": "Solo muito seco, demanda alta", "Ação que pode ser adequada": "12 mm", "Por quê?": "Pode reduzir o risco de estresse hídrico."},
+    ]), hide_index=True, use_container_width=True)
+    st.caption(
+        "Essas linhas são EXEMPLOS, não regras fixas programadas no agente. "
+        "O sistema aprende suas escolhas durante o treinamento, e o resultado pode mudar "
+        "conforme as recompensas escolhidas."
+    )
+    st.markdown(
+        "**Por que não escolher sempre 0 mm?** Porque economizar água pode causar "
+        "deficiência hídrica e penalidades. **Por que não escolher sempre 12 mm?** "
+        "Porque água aplicada em excesso também gera penalidades e pode ser desperdiçada."
+    )
+
 with st.expander("📘 Como o agente aprende (leitura de 1 minuto)"):
     st.markdown(
         "**Agente:** controlador da irrigação. **Ambiente:** talhão e condições meteorológicas simuladas. "
@@ -130,6 +183,54 @@ resumo = pd.DataFrame({
                    rl["dias_estresse"], rl["dias_criticos"]],
 }).round(1)
 st.dataframe(resumo, hide_index=True, use_container_width=True)
+st.markdown("### De onde veio o consumo de água do Q-Learning?")
+st.write(
+    "O agente não tem calendário de irrigação obrigatório. Em cada um dos 180 dias, "
+    "ele escolhe **0, 6 ou 12 mm**. O simulador soma as lâminas aplicadas em cada safra "
+    "e apresenta a média das 12 safras testadas."
+)
+decisoes = pd.DataFrame([
+    {"Política": "Calendário fixo", "0 mm (dias)": base["dias_0mm"],
+     "6 mm (dias)": base["dias_6mm"], "8 mm (dias)": base["dias_8mm"],
+     "12 mm (dias)": base["dias_12mm"], "Total (mm/safra)": base["agua_mm"],
+     "Água (m³/ha)": base["agua_m3_ha"]},
+    {"Política": "Q-Learning", "0 mm (dias)": rl["dias_0mm"],
+     "6 mm (dias)": rl["dias_6mm"], "8 mm (dias)": rl["dias_8mm"],
+     "12 mm (dias)": rl["dias_12mm"], "Total (mm/safra)": rl["agua_mm"],
+     "Água (m³/ha)": rl["agua_m3_ha"]},
+]).round(1)
+st.dataframe(decisoes, hide_index=True, use_container_width=True)
+st.caption(
+    "Números de dias = MÉDIAS das 12 safras; por isso podem ter casas decimais. "
+    "Cada linha soma aproximadamente 180 dias. A política fixa aplica 8 mm; "
+    "o Q-Learning nunca escolhe 8 mm, pois suas ações são 0, 6 e 12 mm."
+)
+st.markdown(
+    f"**Conferência do Q-Learning:** "
+    f"({rl['dias_6mm']:.1f} dias × 6 mm + {rl['dias_12mm']:.1f} dias × 12 mm) "
+    f"= **{rl['agua_mm']:.0f} mm por safra**, em média; "
+    f"multiplicando por 10 = **{rl['agua_m3_ha']:,.0f} m³/ha**. "
+    "Os dias com ação 0 mm não acrescentam água de irrigação."
+)
+with st.expander("🔍 Ver decisões reais dos primeiros 10 dias (primeira safra de teste)"):
+    st.write(
+        "A tabela abaixo mostra a **primeira das 12 safras avaliadas**, não uma regra "
+        "manual. Compare como a mesma condição climática pode levar a ações distintas. "
+        "A coluna 'umidade inicial' indica água no solo; 'irrigação' indica quanto foi adicionado."
+    )
+    detalhe = info["historico"].loc[lambda d: d["Dia"] <= 10, [
+        "Dia", "Política", "Umidade inicial (mm)", "Previsão de chuva",
+        "Demanda hídrica", "Irrigação (mm)", "Chuva (mm)",
+        "Umidade final (mm)", "Estresse"
+    ]].copy()
+    detalhe["Estresse"] = detalhe["Estresse"].map({0: "Não", 1: "Sim"})
+    st.dataframe(detalhe.round(1), hide_index=True, use_container_width=True)
+    st.caption(
+        "A previsão de chuva pode falhar. A chuva efetiva e a evaporação "
+        "modificam o resultado após a ação. No simulador, 95% da água aplicada "
+        "entra no balanço do solo; isso não altera o volume de irrigação informado."
+    )
+
 st.caption(
     "Água = volume equivalente por hectare (1 mm de lâmina = 10 m³/ha). "
     "O índice da cultura é apenas uma PROXY ARTIFICIAL construída a partir de dias de estresse, "
