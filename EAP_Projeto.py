@@ -1,40 +1,39 @@
 import streamlit as st
 import pandas as pd
 import graphviz
+import base64
 
-# Configuração da página
 st.set_page_config(page_title="WBS / EAP Builder - Escopo e Qualidade", layout="wide")
 
-st.title("📊 Construtor Interativo de EAP (Estilo WBS Chart Pro)")
-st.markdown("Decomponha o projeto a partir do **Nível 0** até os **Pacotes de Trabalho**.")
+st.title("📊 Construtor Interativo de EAP")
 
-# Inicialização do banco de dados na sessão do navegador do aluno
+# Inicialização dos dados
 if "eap_dados" not in st.session_state:
     st.session_state.eap_dados = [
-        {"Código": "0", "Pai": None, "Tipo": "Projeto (Nível 0)", "Nome": "CONSTRUÇÃO DA CASA", "Custo": 0.0, "Horas": 0},
+        {"Código": "0", "Pai": None, "Tipo": "Projeto", "Nome": "CONSTRUÇÃO DA CASA", "Custo": 0.0, "Horas": 0},
         {"Código": "1", "Pai": "0", "Tipo": "Entrega", "Nome": "ESCRITÓRIO DE ARQUITETURA", "Custo": 0.0, "Horas": 0},
         {"Código": "1.1", "Pai": "1", "Tipo": "Pacote de Trabalho", "Nome": "Ante-Projeto Arquitetônico", "Custo": 2500.0, "Horas": 40},
         {"Código": "1.2", "Pai": "1", "Tipo": "Pacote de Trabalho", "Nome": "Aprovação na Prefeitura", "Custo": 1200.0, "Horas": 16},
         {"Código": "2", "Pai": "0", "Tipo": "Entrega", "Nome": "INFRA-ESTRUTURA", "Custo": 0.0, "Horas": 0},
         {"Código": "2.1", "Pai": "2", "Tipo": "Pacote de Trabalho", "Nome": "Limpeza do Terreno", "Custo": 800.0, "Horas": 24},
         {"Código": "2.2", "Pai": "2", "Tipo": "Pacote de Trabalho", "Nome": "Terraplanagem", "Custo": 3500.0, "Horas": 32},
+        {"Código": "3", "Pai": "0", "Tipo": "Entrega", "Nome": "FUNDAÇÕES", "Custo": 0.0, "Horas": 0},
+        {"Código": "3.1", "Pai": "3", "Tipo": "Entrega", "Nome": "Fundações Profundas", "Custo": 0.0, "Horas": 0},
+        {"Código": "3.1.1", "Pai": "3.1", "Tipo": "Pacote de Trabalho", "Nome": "Perfuração de Estacas", "Custo": 4200.0, "Horas": 48},
+        {"Código": "3.1.2", "Pai": "3.1", "Tipo": "Pacote de Trabalho", "Nome": "Concretagem", "Custo": 3100.0, "Horas": 24},
     ]
 
 df = pd.DataFrame(st.session_state.eap_dados)
 
-# Função para gerar o próximo código EAP automaticamente (ex: 1 -> 1.1 -> 1.2)
 def gerar_proximo_codigo(codigo_pai, dataframe):
     filhos = dataframe[dataframe["Pai"] == codigo_pai]
     if codigo_pai == "0":
         return str(len(filhos) + 1)
     return f"{codigo_pai}.{len(filhos) + 1}"
 
-# Função de Roll-up (Soma custos e horas dos pacotes para as entregas e projeto)
 def calcular_rollup(dataframe):
     df_calc = dataframe.copy()
-    # Calcula a profundidade do nó pelo número de pontos no código
     df_calc["Profundidade"] = df_calc["Código"].apply(lambda x: 0 if x == "0" else len(str(x).split(".")))
-    # Ordena do nível mais baixo para o mais alto
     df_calc = df_calc.sort_values(by="Profundidade", ascending=False)
     
     for idx, row in df_calc.iterrows():
@@ -46,11 +45,11 @@ def calcular_rollup(dataframe):
             
     return df_calc.sort_values(by="Código")
 
-# --- BARRA LATERAL: CONTROLES DE DECOMPOSIÇÃO ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("1. Definir Projeto (Nível 0)")
-    nome_projeto = st.text_input("Nome do Projeto:", value=df.loc[df["Código"] == "0", "Nome"].values[0])
-    if st.button("Atualizar Nome do Projeto"):
+    st.header("1. Projeto")
+    nome_projeto = st.text_input("Nome do Projeto:", value=df.loc[df["Código"] == "0", "Nome"].values)
+    if st.button("Atualizar Nome"):
         for item in st.session_state.eap_dados:
             if item["Código"] == "0":
                 item["Nome"] = nome_projeto.upper()
@@ -59,17 +58,19 @@ with st.sidebar:
     st.divider()
     st.header("2. Decompor Escopo")
     
-    # Filtra apenas itens que NÃO são pacotes de trabalho para serem "Pais"
     possiveis_pais = df[df["Tipo"] != "Pacote de Trabalho"]
-    opcoes_pai = {f"{row['Código']} - {row['Nome']}": row['Código'] for _, row in possiveis_pais.iterrows()}
+    opcoes_pai = {
+        (f"{row['Nome']} (Projeto)" if row['Código'] == "0" else f"{row['Código']} - {row['Nome']}"): row['Código'] 
+        for _, row in possiveis_pais.iterrows()
+    }
     
-    pai_selecionado_label = st.selectbox("Selecione onde adicionar (Item Pai):", list(opcoes_pai.keys()))
+    pai_selecionado_label = st.selectbox("Adicionar abaixo de:", list(opcoes_pai.keys()))
     codigo_pai = opcoes_pai[pai_selecionado_label]
     
     tipo_item = st.radio(
         "Tipo de Elemento:",
-        ["Entrega / Sub-entrega", "Pacote de Trabalho"],
-        help="Pacotes de Trabalho ficam na ponta da EAP e recebem Custo e Tempo."
+        ["Entrega", "Pacote de Trabalho"],
+        help="Entregas abrem na horizontal. Pacotes de Trabalho ficam empilhados na vertical."
     )
     
     nome_novo_item = st.text_input("Nome da Entrega ou Pacote:")
@@ -92,87 +93,128 @@ with st.sidebar:
                 "Código": novo_cod,
                 "Pai": codigo_pai,
                 "Tipo": tipo_item,
-                "Nome": nome_novo_item.upper() if tipo_item != "Pacote de Trabalho" else nome_novo_item,
+                "Nome": nome_novo_item.upper() if tipo_item == "Entrega" else nome_novo_item,
                 "Custo": custo_item,
                 "Horas": horas_item
             })
             st.rerun()
 
     st.divider()
-    if st.button("🗑️ Limpar Tudo (Novo Projeto)"):
+    st.header("3. Visualização (Recolher)")
+    # Permite fechar o que está abaixo de qualquer Entrega
+    entregas_disponiveis = df[df["Tipo"] == "Entrega"]
+    opcoes_recolher = {f"{row['Código']} - {row['Nome']}": row['Código'] for _, row in entregas_disponiveis.iterrows()}
+    entregas_fechadas_labels = st.multiselect(
+        "Fechar itens abaixo de:",
+        options=list(opcoes_recolher.keys()),
+        help="Oculta sub-entregas e pacotes abaixo da entrega selecionada."
+    )
+    codigos_fechados = [opcoes_recolher[lbl] for lbl in entregas_fechadas_labels]
+
+    st.divider()
+    if st.button("🗑️ Limpar Tudo"):
         st.session_state.eap_dados = [
-            {"Código": "0", "Pai": None, "Tipo": "Projeto (Nível 0)", "Nome": "NOVO PROJETO", "Custo": 0.0, "Horas": 0}
+            {"Código": "0", "Pai": None, "Tipo": "Projeto", "Nome": "NOVO PROJETO", "Custo": 0.0, "Horas": 0}
         ]
         st.rerun()
 
-# Processa os cálculos atualizados
+# Calcula os totais (Roll-up) ANTES de filtrar os nós recolhidos para manter os valores corretos
 df_final = calcular_rollup(pd.DataFrame(st.session_state.eap_dados))
 
-# --- ÁREA PRINCIPAL: DIAGRAMA VISUAL E TABELA ---
-tab_diagrama, tab_tabela = st.tabs(["🌳 Diagrama EAP (Visual)", "📋 Tabela e Dicionário"])
+# --- ÁREA PRINCIPAL ---
+tab_diagrama, tab_tabela = st.tabs(["🌳 Diagrama EAP", "📋 Tabela Detalhada"])
 
 with tab_diagrama:
-    dot = graphviz.Digraph()
-    dot.attr(rankdir="TB", splines="ortho", nodesep="0.3", ranksep="0.4")
-    dot.attr("node", shape="plain", fontname="Arial", fontsize="10")
+    # Controle de Zoom
+    col_z1, col_z2 = st.columns([1, 3])
+    with col_z1:
+        zoom = st.slider("🔍 Zoom do Diagrama (%)", min_value=40, max_value=180, value=90, step=10)
 
-    # Função auxiliar para formatar moeda
+    dot = graphviz.Digraph(format="svg")
+    dot.attr(rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35")
+    dot.attr("node", shape="plain", fontname="Arial", fontsize="9")
+    # dir="none" remove todas as setas das linhas
+    dot.attr("edge", dir="none", color="#333333", penwidth="1.0")
+
     def fmt_moeda(val):
         return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    # 1. Desenha o Nível 0 (Projeto)
-    proj = df_final[df_final["Código"] == "0"].iloc[0]
+    # Verifica se um nó deve ser ocultado porque algum ancestral seu está recolhido
+    def esta_oculto(codigo):
+        if codigo in ["0", None]:
+            return False
+        for fechado in codigos_fechados:
+            if codigo.startswith(f"{fechado}."):
+                return True
+        return False
+
+    # 1. Nó Raiz (Projeto) - Sem texto "Nível 0"
+    proj = df_final[df_final["Código"] == "0"].iloc
     label_proj = f'''<
-    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5" BGCOLOR="#85C1E9">
-        <TR><TD COLSPAN="2" ALIGN="LEFT"><FONT POINT-SIZE="8">Nível 0</FONT></TD></TR>
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#85C1E9">
         <TR><TD COLSPAN="2"><B>{proj['Nome']}</B></TD></TR>
         <TR><TD>{fmt_moeda(proj['Custo'])}</TD><TD>{int(proj['Horas'])} horas</TD></TR>
     </TABLE>>'''
     dot.node("0", label=label_proj)
 
-    # 2. Desenha as Entregas de Nível 1 e empilha seus filhos verticalmente (Estilo WBS Chart Pro)
-    entregas_n1 = df_final[df_final["Pai"] == "0"]
-    
-    for _, ent in entregas_n1.iterrows():
-        cod_n1 = ent["Código"]
-        label_n1 = f'''<
-        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#D6EAF8">
-            <TR><TD COLSPAN="2" ALIGN="LEFT"><B>{cod_n1}</B></TD></TR>
+    # 2. Entregas (Hierarquia em árvore)
+    entregas = df_final[df_final["Tipo"] == "Entrega"]
+    for _, ent in entregas.iterrows():
+        cod_ent = ent["Código"]
+        if esta_oculto(cod_ent):
+            continue
+            
+        # Sinaliza visualmente com [+] se a entrega estiver recolhida
+        indicador_fechado = "  [+]" if cod_ent in codigos_fechados else ""
+        
+        label_ent = f'''<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#D6EAF8">
+            <TR><TD COLSPAN="2" ALIGN="LEFT"><B>{cod_ent}{indicador_fechado}</B></TD></TR>
             <TR><TD COLSPAN="2"><B>{ent['Nome']}</B></TD></TR>
             <TR><TD>{fmt_moeda(ent['Custo'])}</TD><TD>{int(ent['Horas'])} horas</TD></TR>
         </TABLE>>'''
-        dot.node(cod_n1, label=label_n1)
-        dot.edge("0", cod_n1)
-        
-        # Busca todos os descendentes desta entrega (Nível 2, 3...)
-        descendentes = df_final[df_final["Código"].str.startswith(f"{cod_n1}.")]
-        
-        # Cria uma linha vertical invisível para empilhar os itens exatamente como na imagem anexada
-        ultimo_no_coluna = cod_n1
-        for _, desc in descendentes.iterrows():
-            cod_desc = desc["Código"]
-            is_pacote = desc["Tipo"] == "Pacote de Trabalho"
-            cor_bg = "#FFFFFF" if is_pacote else "#EBF5FB"
-            borda = "2" if is_pacote else "1"
-            
-            label_desc = f'''<
-            <TABLE BORDER="{borda}" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="{cor_bg}">
-                <TR><TD COLSPAN="2" ALIGN="LEFT"><B>{cod_desc}</B> <FONT POINT-SIZE="8">({desc['Tipo']})</FONT></TD></TR>
-                <TR><TD COLSPAN="2">{desc['Nome']}</TD></TR>
-                <TR><TD>{fmt_moeda(desc['Custo'])}</TD><TD>{int(desc['Horas'])} horas</TD></TR>
-            </TABLE>>'''
-            
-            dot.node(cod_desc, label=label_desc)
-            # Conecta verticalmente para manter o alinhamento em coluna única abaixo da entrega
-            dot.edge(ultimo_no_coluna, cod_desc)
-            ultimo_no_coluna = cod_desc
+        dot.node(cod_ent, label=label_ent)
+        dot.edge(ent["Pai"], cod_ent)
 
-    st.graphviz_chart(dot, use_container_width=True)
+    # 3. Pacotes de Trabalho (Empilhados verticalmente abaixo de sua entrega pai)
+    pacotes = df_final[df_final["Tipo"] == "Pacote de Trabalho"]
+    # Agrupa pacotes pelo Pai para empilhar um embaixo do outro
+    for pai_cod, grupo_pacotes in pacotes.groupby("Pai"):
+        if esta_oculto(pai_cod) or pai_cod in codigos_fechados:
+            continue
+            
+        ultimo_no_coluna = pai_cod
+        for _, pct in grupo_pacotes.iterrows():
+            cod_pct = pct["Código"]
+            label_pct = f'''<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF">
+                <TR><TD COLSPAN="2" ALIGN="LEFT"><B>{cod_pct}</B></TD></TR>
+                <TR><TD COLSPAN="2">{pct['Nome']}</TD></TR>
+                <TR><TD>{fmt_moeda(pct['Custo'])}</TD><TD>{int(pct['Horas'])} horas</TD></TR>
+            </TABLE>>'''
+            dot.node(cod_pct, label=label_pct)
+            # Conecta em cadeia vertical (Pai -> Pacote 1 -> Pacote 2...) sem setas
+            dot.edge(ultimo_no_coluna, cod_pct)
+            ultimo_no_coluna = cod_pct
+
+    # Renderiza em SVG dentro de um container com Zoom e barra de rolagem
+    svg_bytes = dot.pipe(format="svg")
+    svg_b64 = base64.b64encode(svg_bytes).decode("utf-8")
+    
+    html_zoom = f"""
+    <div style="width: 100%; height: 600px; overflow: auto; border: 1px solid #ddd; border-radius: 6px; padding: 15px; background-color: #fafafa; text-align: center;">
+        <img src="data:image/svg+xml;base64,{svg_b64}" style="width: {zoom}%; height: auto; transition: width 0.2s ease;" />
+    </div>
+    """
+    st.markdown(html_zoom, unsafe_allow_html=True)
 
 with tab_tabela:
     st.subheader("Estrutura Analítica Detalhada")
     st.dataframe(
         df_final[["Código", "Tipo", "Nome", "Custo", "Horas"]],
         use_container_width=True,
+        hide_index=True
+    )
+
         hide_index=True
     )
