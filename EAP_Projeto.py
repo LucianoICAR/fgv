@@ -7,7 +7,7 @@ st.set_page_config(page_title="Construtor de EAP", layout="wide")
 st.title("📊 Construtor Interativo de EAP")
 st.markdown("Decomponha o **Projeto** em **Entregas** e **Pacotes de Trabalho**.")
 
-# Inicialização dos dados (Projeto começa como Código "1", sem Nível 0)
+# Inicialização dos dados (Projeto começa como Código "1")
 if "eap_dados" not in st.session_state:
     st.session_state.eap_dados = [
         {"Código": "1", "Pai": None, "Tipo": "Projeto", "Nome": "CONSTRUÇÃO DA CASA", "Custo": 0.0, "Horas": 0},
@@ -61,24 +61,29 @@ with st.sidebar:
     pai_selecionado = st.selectbox("Adicionar abaixo de:", list(opcoes_pai.keys()))
     codigo_pai = opcoes_pai[pai_selecionado]
     
+    # Seleção do tipo fora de qualquer formulário para atualizar a tela na hora
     tipo_item = st.radio(
         "Tipo de Elemento:",
         ["Entrega", "Pacote de Trabalho"],
-        help="Entregas abrem na horizontal. Pacotes de Trabalho ficam empilhados na vertical."
+        key="seletor_tipo_elemento"
     )
     
-    nome_novo_item = st.text_input("Nome da Entrega ou Pacote:")
+    nome_novo_item = st.text_input("Nome do Item:", key="input_nome_item")
     
-    custo_item = 0.0
-    horas_item = 0
+    # Campos de Custo e Prazo sempre visíveis quando Pacote de Trabalho está marcado
     if tipo_item == "Pacote de Trabalho":
+        st.markdown("**Estimativas do Pacote:**")
         col1, col2 = st.columns(2)
         with col1:
-            custo_item = st.number_input("Custo (R$):", min_value=0.0, step=100.0)
+            custo_item = st.number_input("Custo (R$):", min_value=0.0, value=0.0, step=100.0, key="input_custo")
         with col2:
-            horas_item = st.number_input("Tempo (Horas):", min_value=0, step=4)
+            horas_item = st.number_input("Prazo (Horas):", min_value=0, value=0, step=4, key="input_horas")
+    else:
+        custo_item = 0.0
+        horas_item = 0
+        st.caption("ℹ️ Entregas somam automaticamente os custos e prazos dos seus pacotes.")
             
-    if st.button("➕ Adicionar Item", type="primary"):
+    if st.button("➕ Adicionar Item", type="primary", use_container_width=True):
         if nome_novo_item.strip() == "":
             st.error("Digite um nome para o item.")
         else:
@@ -88,14 +93,13 @@ with st.sidebar:
                 "Pai": codigo_pai,
                 "Tipo": tipo_item,
                 "Nome": nome_novo_item.upper() if tipo_item == "Entrega" else nome_novo_item,
-                "Custo": custo_item,
-                "Horas": horas_item
+                "Custo": float(custo_item),
+                "Horas": int(horas_item)
             })
             st.rerun()
 
     st.divider()
     st.header("3. Visualização (Recolher)")
-    # Opção para o aluno fechar os pacotes abaixo de entregas específicas
     entregas_disponiveis = df[df["Tipo"] == "Entrega"]
     opcoes_recolher = {f"{r['Código']} - {r['Nome']}": r['Código'] for _, r in entregas_disponiveis.iterrows()}
     entregas_fechadas_labels = st.multiselect(
@@ -106,7 +110,7 @@ with st.sidebar:
     codigos_fechados = [opcoes_recolher[lbl] for lbl in entregas_fechadas_labels]
 
     st.divider()
-    if st.button("🗑️ Limpar Tudo"):
+    if st.button("🗑️ Limpar Tudo", use_container_width=True):
         st.session_state.eap_dados = [
             {"Código": "1", "Pai": None, "Tipo": "Projeto", "Nome": "NOVO PROJETO", "Custo": 0.0, "Horas": 0}
         ]
@@ -122,13 +126,11 @@ def fmt_moeda(val):
 tab_diagrama, tab_tabela = st.tabs(["🌳 Diagrama EAP", "📋 Tabela Detalhada"])
 
 with tab_diagrama:
-    st.caption("💡 Dica: Passe o mouse sobre o diagrama e clique no ícone de expandir (canto superior direito) ou use o zoom para navegar.")
+    st.caption("💡 Dica: Passe o mouse sobre o diagrama e clique no ícone de expandir (canto superior direito) ou use o controle abaixo para dar zoom.")
     
-    # Controle de tamanho do diagrama pelo usuário
-    zoom_escala = st.slider("Ajustar tamanho do diagrama:", min_value=0.5, max_value=1.5, value=0.8, step=0.1)
+    zoom_escala = st.slider("Ajustar tamanho / zoom do diagrama:", min_value=0.5, max_value=1.8, value=0.8, step=0.1)
     
     dot = graphviz.Digraph()
-    # Configurações visuais compactas e linhas sem setas (arrowhead="none")
     dot.attr(rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35", size=f"{12*zoom_escala},{8*zoom_escala}")
     dot.attr("node", shape="plain", fontname="Arial", fontsize="9")
     dot.attr("edge", arrowhead="none", color="#5D6D7E", penwidth="1.2")
@@ -142,13 +144,12 @@ with tab_diagrama:
     </TABLE>>'''
     dot.node("1", label=label_proj)
 
-    # 2. Desenha todas as ENTREGAS em formato hierárquico (árvore horizontal)
+    # 2. Desenha todas as ENTREGAS em formato hierárquico
     entregas = df_final[df_final["Tipo"] == "Entrega"]
     for _, ent in entregas.iterrows():
         cod_ent = ent["Código"]
         pai_ent = ent["Pai"]
         
-        # Verifica se a entrega pai está recolhida
         if any(cod_ent.startswith(f"{f}.") for f in codigos_fechados):
             continue
             
@@ -166,7 +167,6 @@ with tab_diagrama:
     for _, ent in entregas.iterrows():
         cod_ent = ent["Código"]
         
-        # Se a entrega estiver na lista de fechadas (ou filha de uma fechada), não desenha os pacotes
         if cod_ent in codigos_fechados or any(cod_ent.startswith(f"{f}.") for f in codigos_fechados):
             continue
             
@@ -182,15 +182,13 @@ with tab_diagrama:
                 <TR><TD>{fmt_moeda(pct['Custo'])}</TD><TD>{int(pct['Horas'])}h</TD></TR>
             </TABLE>>'''
             dot.node(cod_pct, label=label_pct)
-            # Conecta um pacote abaixo do outro para manter o empilhamento vertical
             dot.edge(ultimo_no, cod_pct)
             ultimo_no = cod_pct
 
-    # Renderiza o gráfico permitindo ajuste de largura e zoom nativo
     st.graphviz_chart(dot, use_container_width=False)
 
 with tab_tabela:
-    st.subheader("Resumo de Escopo, Tempo e Custo")
+    st.subheader("Resumo de Escopo, Prazo e Custo")
     st.dataframe(
         df_final[["Código", "Tipo", "Nome", "Custo", "Horas"]],
         use_container_width=True,
