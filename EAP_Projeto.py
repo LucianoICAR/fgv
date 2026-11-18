@@ -215,6 +215,3 @@ with tab_tabela:
         use_container_width=True,
         hide_index=True
     )
-
-        hide_index=True
-    )
