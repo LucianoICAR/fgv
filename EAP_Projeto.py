@@ -1,8 +1,3 @@
-Aqui está o código completo consolidado em um único arquivo (EAP_Projeto.py), pronto para ser copiado e colado diretamente no seu repositório do GitHub.
-Ele inclui todas as funcionalidades solicitadas: decomposição hierárquica sem setas, pacotes de trabalho empilhados, soma automática (roll-up), edição completa (tanto pela barra lateral quanto pela tabela), opção de recolher entregas e zoom vetorial funcional.
-
-Código Completo (EAP_Projeto.py)
-
 python
 import streamlit as st
 import pandas as pd
