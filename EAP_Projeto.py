@@ -1,13 +1,20 @@
+Aqui está o código completo consolidado em um único arquivo (EAP_Projeto.py), pronto para ser copiado e colado diretamente no seu repositório do GitHub.
+Ele inclui todas as funcionalidades solicitadas: decomposição hierárquica sem setas, pacotes de trabalho empilhados, soma automática (roll-up), edição completa (tanto pela barra lateral quanto pela tabela), opção de recolher entregas e zoom vetorial funcional.
+
+Código Completo (EAP_Projeto.py)
+
+python
 import streamlit as st
 import pandas as pd
 import graphviz
+import base64
 
 st.set_page_config(page_title="Construtor de EAP", layout="wide")
 
 st.title("📊 Construtor Interativo de EAP")
-st.markdown("Decomponha o **Projeto** em **Entregas** e **Pacotes de Trabalho**.")
+st.markdown("Decomponha o **Projeto** em **Entregas** e **Pacotes de Trabalho**, edite valores e ajuste o zoom.")
 
-# Inicialização dos dados (Projeto começa como Código "1")
+# Inicialização dos dados na sessão
 if "eap_dados" not in st.session_state:
     st.session_state.eap_dados = [
         {"Código": "1", "Pai": None, "Tipo": "Projeto", "Nome": "CONSTRUÇÃO DA CASA", "Custo": 0.0, "Horas": 0},
@@ -41,38 +48,28 @@ def calcular_rollup(dataframe):
             
     return df_calc.sort_values(by="Código")
 
+# Formatação de moeda
+def fmt_moeda(val):
+    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("1. Projeto Principal")
-    nome_proj_atual = df.loc[df["Código"] == "1", "Nome"].iloc[0]
-    novo_nome_proj = st.text_input("Nome do Projeto:", value=nome_proj_atual)
-    if st.button("Atualizar Projeto"):
-        for item in st.session_state.eap_dados:
-            if item["Código"] == "1":
-                item["Nome"] = novo_nome_proj.upper()
-        st.rerun()
-
-    st.divider()
-    st.header("2. Decompor Escopo")
-    
+    st.header("1. Adicionar Novo Item")
     possiveis_pais = df[df["Tipo"] != "Pacote de Trabalho"]
     opcoes_pai = {f"{row['Código']} - {row['Nome']}": row['Código'] for _, row in possiveis_pais.iterrows()}
     
     pai_selecionado = st.selectbox("Adicionar abaixo de:", list(opcoes_pai.keys()))
     codigo_pai = opcoes_pai[pai_selecionado]
     
-    # Seleção do tipo fora de qualquer formulário para atualizar a tela na hora
     tipo_item = st.radio(
         "Tipo de Elemento:",
         ["Entrega", "Pacote de Trabalho"],
         key="seletor_tipo_elemento"
     )
     
-    nome_novo_item = st.text_input("Nome do Item:", key="input_nome_item")
+    nome_novo_item = st.text_input("Nome do Novo Item:", key="input_nome_item")
     
-    # Campos de Custo e Prazo sempre visíveis quando Pacote de Trabalho está marcado
     if tipo_item == "Pacote de Trabalho":
-        st.markdown("**Estimativas do Pacote:**")
         col1, col2 = st.columns(2)
         with col1:
             custo_item = st.number_input("Custo (R$):", min_value=0.0, value=0.0, step=100.0, key="input_custo")
@@ -81,7 +78,6 @@ with st.sidebar:
     else:
         custo_item = 0.0
         horas_item = 0
-        st.caption("ℹ️ Entregas somam automaticamente os custos e prazos dos seus pacotes.")
             
     if st.button("➕ Adicionar Item", type="primary", use_container_width=True):
         if nome_novo_item.strip() == "":
@@ -99,40 +95,75 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.header("3. Visualização (Recolher)")
+    st.header("2. Editar ou Excluir Item")
+    opcoes_editar = {f"{r['Código']} - {r['Nome']} ({r['Tipo']})": r['Código'] for _, r in df.iterrows()}
+    item_edit_label = st.selectbox("Selecione o item para editar:", list(opcoes_editar.keys()))
+    cod_edit = opcoes_editar[item_edit_label]
+    
+    item_atual = next(item for item in st.session_state.eap_dados if item["Código"] == cod_edit)
+    
+    novo_nome_edit = st.text_input("Editar Nome:", value=item_atual["Nome"], key=f"edit_nome_{cod_edit}")
+    
+    if item_atual["Tipo"] == "Pacote de Trabalho":
+        col_e1, col_e2 = st.columns(2)
+        with col_e1:
+            novo_custo_edit = st.number_input("Editar Custo (R$):", min_value=0.0, value=float(item_atual["Custo"]), step=100.0, key=f"edit_custo_{cod_edit}")
+        with col_e2:
+            novo_horas_edit = st.number_input("Editar Prazo (h):", min_value=0, value=int(item_atual["Horas"]), step=4, key=f"edit_horas_{cod_edit}")
+    else:
+        novo_custo_edit = 0.0
+        novo_horas_edit = 0
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("💾 Salvar Alteração", use_container_width=True):
+            for item in st.session_state.eap_dados:
+                if item["Código"] == cod_edit:
+                    item["Nome"] = novo_nome_edit.upper() if item["Tipo"] in ["Projeto", "Entrega"] else novo_nome_edit
+                    if item["Tipo"] == "Pacote de Trabalho":
+                        item["Custo"] = float(novo_custo_edit)
+                        item["Horas"] = int(novo_horas_edit)
+            st.rerun()
+            
+    with col_btn2:
+        if cod_edit != "1":
+            if st.button("🗑️ Excluir Item", use_container_width=True):
+                st.session_state.eap_dados = [
+                    item for item in st.session_state.eap_dados
+                    if item["Código"] != cod_edit and not item["Código"].startswith(f"{cod_edit}.")
+                ]
+                st.rerun()
+
+    st.divider()
+    st.header("3. Recolher Entregas")
     entregas_disponiveis = df[df["Tipo"] == "Entrega"]
     opcoes_recolher = {f"{r['Código']} - {r['Nome']}": r['Código'] for _, r in entregas_disponiveis.iterrows()}
     entregas_fechadas_labels = st.multiselect(
         "Ocultar pacotes das entregas:",
-        options=list(opcoes_recolher.keys()),
-        help="Selecione entregas para recolher seus pacotes de trabalho no diagrama."
+        options=list(opcoes_recolher.keys())
     )
     codigos_fechados = [opcoes_recolher[lbl] for lbl in entregas_fechadas_labels]
 
     st.divider()
-    if st.button("🗑️ Limpar Tudo", use_container_width=True):
+    if st.button("🔄 Resetar Projeto", use_container_width=True):
         st.session_state.eap_dados = [
             {"Código": "1", "Pai": None, "Tipo": "Projeto", "Nome": "NOVO PROJETO", "Custo": 0.0, "Horas": 0}
         ]
         st.rerun()
 
-# Processa cálculos
+# Processa cálculos atualizados
 df_final = calcular_rollup(pd.DataFrame(st.session_state.eap_dados))
 
-def fmt_moeda(val):
-    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 # --- ÁREA PRINCIPAL ---
-tab_diagrama, tab_tabela = st.tabs(["🌳 Diagrama EAP", "📋 Tabela Detalhada"])
+tab_diagrama, tab_tabela = st.tabs(["🌳 Diagrama EAP", "📋 Tabela Editável"])
 
 with tab_diagrama:
-    st.caption("💡 Dica: Passe o mouse sobre o diagrama e clique no ícone de expandir (canto superior direito) ou use o controle abaixo para dar zoom.")
+    zoom_pct = st.slider("🔍 Zoom do Diagrama (%):", min_value=40, max_value=200, value=100, step=10)
+    escala = zoom_pct / 100.0
     
-    zoom_escala = st.slider("Ajustar tamanho / zoom do diagrama:", min_value=0.5, max_value=1.8, value=0.8, step=0.1)
-    
-    dot = graphviz.Digraph()
-    dot.attr(rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35", size=f"{12*zoom_escala},{8*zoom_escala}")
-    dot.attr("node", shape="plain", fontname="Arial", fontsize="9")
+    dot = graphviz.Digraph(format="svg")
+    dot.attr(rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35")
+    dot.attr("node", shape="plain", fontname="Arial", fontsize="10")
     dot.attr("edge", arrowhead="none", color="#5D6D7E", penwidth="1.2")
 
     # 1. Desenha o Projeto (Nó raiz "1")
@@ -163,7 +194,7 @@ with tab_diagrama:
         dot.node(cod_ent, label=label_ent)
         dot.edge(pai_ent, cod_ent)
 
-    # 3. Desenha os PACOTES DE TRABALHO empilhados verticalmente abaixo de sua Entrega
+    # 3. Desenha os PACOTES DE TRABALHO empilhados verticalmente
     for _, ent in entregas.iterrows():
         cod_ent = ent["Código"]
         
@@ -185,12 +216,30 @@ with tab_diagrama:
             dot.edge(ultimo_no, cod_pct)
             ultimo_no = cod_pct
 
-    st.graphviz_chart(dot, use_container_width=False)
-
+    # Renderiza em SVG vetorial com Zoom real via CSS e barra de rolagem
+    svg_bytes = dot.pipe(format="svg")
+    svg_base64 = base64.b64encode(svg_bytes).decode("utf-8")
+    
+    html_zoom = f"""
+    <div style="width: 100%; height: 600px; overflow: auto; border: 1px solid #E0E0E0; border-radius: 8px; padding: 16px; background-color: #FAFAFA;">
+Use o código com cuidado.
+"""
+st.components.v1.html(html_zoom, height=630)
 with tab_tabela:
-    st.subheader("Resumo de Escopo, Prazo e Custo")
-    st.dataframe(
-        df_final[["Código", "Tipo", "Nome", "Custo", "Horas"]],
-        use_container_width=True,
-        hide_index=True
-    )
+st.subheader("Tabela de Escopo, Prazo e Custo")
+st.caption("Você também pode editar nomes, custos e prazos diretamente nas células abaixo (para Pacotes de Trabalho).")
+df_editado = st.data_editor(
+df_final[["Código", "Tipo", "Nome", "Custo", "Horas"]],
+disabled=["Código", "Tipo"],
+use_container_width=True,
+hide_index=True
+)
+if st.button("Atualizar pela Tabela"):
+for _, row in df_editado.iterrows():
+for item in st.session_state.eap_dados:
+if item["Código"] == row["Código"]:
+item["Nome"] = row["Nome"].upper() if item["Tipo"] in ["Projeto", "Entrega"] else row["Nome"]
+if item["Tipo"] == "Pacote de Trabalho":
+item["Custo"] = float(row["Custo"])
+item["Horas"] = int(row["Horas"])
+st.rerun()
